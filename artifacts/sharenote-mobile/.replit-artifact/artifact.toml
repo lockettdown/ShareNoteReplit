@@ -1,0 +1,24 @@
+kind = "mobile"
+previewPath = "/sharenote-mobile/"
+title = "ShareNote Mobile"
+description = "ShareNote is a family coordination mobile app for iOS and Android. It lets families create shared spaces, coordinate through notes and tasks, and stay connected. Built with Expo for App Store and Google Play submission."
+version = "1.0.0"
+id = "artifacts/sharenote-mobile"
+router = "expo-domain"
+
+[[services]]
+name = "expo"
+ensurePreviewReachable = "/status"
+paths = [ "/sharenote-mobile/" ]
+localPort = 23504
+
+[services.development]
+run = "pnpm --filter @workspace/sharenote-mobile run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/sharenote-mobile", "run", "build" ]
+run = [ "pnpm", "--filter", "@workspace/sharenote-mobile", "run", "serve" ]
+
+[services.env]
+PORT = "23504"
+BASE_PATH = "/sharenote-mobile/"

@@ -1,0 +1,37 @@
+import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useColors } from '@/hooks/useColors';
+import { Feather } from '@expo/vector-icons';
+import { useAppState } from '@/context/AppState';
+import { useState } from 'react';
+import * as Haptics from 'expo-haptics';
+import { MemberAvatar } from '@/components/MemberAvatar';
+
+export default function MemberProfileScreen() {
+  const router = useRouter();
+  const { id } = useLocalSearchParams<{ id: string }>();
+  const insets = useSafeAreaInsets();
+  const colors = useColors();
+  const { members, profileTasks, events, toggleTask } = useAppState();
+  const [activeTab, setActiveTab] = useState<'tasks' | 'events'>('tasks');
+  const member = members.find((item) => item.id === id);
+  const memberTasks = profileTasks.filter((task) => task.personId === id);
+  const memberEvents = events.filter((event) => event.personId === id);
+  const topPad = Platform.OS === 'web' ? 67 : insets.top;
+  const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  if (!member) return null;
+  return <View style={[styles.root, { backgroundColor: colors.background }]}>
+    <View style={[styles.header, { paddingTop: topPad + 12 }]}><Pressable onPress={() => router.back()} style={styles.headerLeft}><Feather name="arrow-left" size={24} color={colors.foreground} /></Pressable><Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>{member.name}</Text><Pressable style={styles.headerRight}><Feather name="more-vertical" size={24} color={colors.primary} /></Pressable></View>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
+      <View style={styles.profileHero}><MemberAvatar member={member} size={100} borderWidth={4} /><Text style={[styles.heroName, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>{member.name}</Text><View style={[styles.roleBadge, { backgroundColor: '#f0ecff' }]}><Feather name="users" size={12} color={colors.primary} /><Text style={[styles.roleText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>{member.role}</Text></View></View>
+      <View style={[styles.tabs, { backgroundColor: '#f9f8ff' }]}>{(['tasks', 'events'] as const).map((tab) => <Pressable key={tab} style={[styles.tab, activeTab === tab && [styles.activeTab, { backgroundColor: '#fff' }]]} onPress={() => { Haptics.selectionAsync(); setActiveTab(tab); }}><Text style={[styles.tabText, { color: activeTab === tab ? colors.primaryStrong : colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>{tab === 'tasks' ? 'Tasks' : 'Events'}</Text></Pressable>)}</View>
+      {activeTab === 'tasks' ? <View style={styles.tasksSection}><View style={styles.tasksHeader}><Text style={[styles.tasksTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Assigned Tasks</Text><Text style={[styles.tasksCount, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>{memberTasks.filter((task) => !task.done).length} Open</Text></View><View style={styles.tasksList}>{memberTasks.map((task) => <Pressable key={task.id} testID={`member-task-${task.id}`} accessibilityLabel={`${task.done ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`} style={[styles.taskCard, { backgroundColor: '#fff', shadowColor: colors.primary }]} onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleTask(task.id); }}><View style={[styles.cardLeftBorder, { backgroundColor: task.color }]} /><View style={[styles.checkbox, task.done && { backgroundColor: colors.primary, borderColor: colors.primary }]}>{task.done && <Feather name="check" size={14} color="#fff" />}</View><View style={styles.taskContent}><Text style={[styles.taskTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold', textDecorationLine: task.done ? 'line-through' : 'none' }]}>{task.title}</Text><View style={styles.taskMeta}><Feather name={task.location.includes('Shop') ? 'shopping-cart' : task.location.includes('Today') ? 'dollar-sign' : 'edit-2'} size={14} color={colors.mutedForeground} /><Text style={[styles.taskMetaText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{task.location.includes('Shop') ? 'List: ' : ''}{task.location}</Text></View></View></Pressable>)}</View></View> : <View style={styles.tasksSection}><View style={styles.tasksHeader}><Text style={[styles.tasksTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Upcoming Events</Text><Text style={[styles.tasksCount, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>{memberEvents.length} Total</Text></View><View style={styles.tasksList}>{memberEvents.map((event) => <View key={event.id} style={[styles.taskCard, { backgroundColor: '#fff', shadowColor: colors.primary }]}><View style={[styles.cardLeftBorder, { backgroundColor: event.color }]} /><View style={styles.eventIcon}><Feather name="calendar" size={18} color={colors.primary} /></View><View style={styles.taskContent}><Text style={[styles.taskTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{event.title}</Text><View style={styles.taskMeta}><Feather name="clock" size={14} color={colors.mutedForeground} /><Text style={[styles.taskMetaText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{event.time}</Text></View></View></View>)}</View></View>}
+    </ScrollView>
+  </View>;
+}
+const styles = StyleSheet.create({
+  root: { flex: 1 }, header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 }, headerLeft: { width: 40 }, headerRight: { width: 40, alignItems: 'flex-end' }, headerTitle: { fontSize: 20 }, scroll: { flex: 1 }, scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 }, profileHero: { alignItems: 'center', gap: 12 }, heroName: { fontSize: 24 }, roleBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, gap: 6 }, roleText: { fontSize: 13 },
+  tabs: { flexDirection: 'row', borderRadius: 16, padding: 4 }, tab: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 14, borderRadius: 12 }, activeTab: { shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 }, tabText: { fontSize: 15 }, tasksSection: { gap: 16 }, tasksHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }, tasksTitle: { fontSize: 20 }, tasksCount: { fontSize: 14 }, tasksList: { gap: 12 },
+  taskCard: { borderRadius: 20, flexDirection: 'row', alignItems: 'center', padding: 20, paddingLeft: 24, gap: 16, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2, overflow: 'hidden' }, cardLeftBorder: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 }, checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 1.5, borderColor: '#e8e0f7', alignItems: 'center', justifyContent: 'center' }, eventIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' }, taskContent: { flex: 1, gap: 4 }, taskTitle: { fontSize: 16 }, taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 }, taskMetaText: { fontSize: 13 },
+});

@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "ShareNote"
+description = "ShareNote is a family coordination mobile-style web app that helps families stay connected through shared notes, calendars, and tasks. It provides a welcoming onboarding experience with account creation and sign-in flows, themed with a soft purple palette."
+version = "1.0.0"
+id = "artifacts/figma-design"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 24154
+
+[services.development]
+run = "pnpm --filter @workspace/figma-design run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/figma-design", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/figma-design/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "24154"
+BASE_PATH = "/"
