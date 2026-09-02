@@ -9,7 +9,7 @@ import {
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
-import { Feather, Ionicons } from '@expo/vector-icons';
+import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
@@ -23,17 +23,33 @@ export default function SignInScreen() {
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  function handleSignIn() {
+  async function handleSignIn() {
     if (!email.trim() || !password.trim()) {
+      setMessage('Enter your email and password.');
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
-    signInFamily(email);
+
+    setIsSubmitting(true);
+    setMessage('');
+
+    const result = await signInFamily(email, password);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setMessage(result.message ?? 'Unable to sign in.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (result.message) setMessage(result.message);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/profile-select');
   }
@@ -119,20 +135,27 @@ export default function SignInScreen() {
 
           <Pressable
             testID="sign-in-btn"
+            disabled={isSubmitting}
             style={({ pressed }) => [
               styles.submitButton,
               {
                 backgroundColor: colors.primary,
-                opacity: pressed ? 0.88 : 1,
+                opacity: isSubmitting ? 0.62 : pressed ? 0.88 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
             onPress={handleSignIn}
           >
             <Text style={[styles.submitButtonText, { color: '#ffffff', fontFamily: 'Inter_600SemiBold' }]}>
-              Sign In
+              {isSubmitting ? 'Signing In...' : 'Sign In'}
             </Text>
           </Pressable>
+
+          {message ? (
+            <Text style={[styles.messageText, { color: colors.destructive, fontFamily: 'Inter_500Medium' }]}>
+              {message}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.footer}>
@@ -181,6 +204,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8,
   },
   submitButtonText: { fontSize: 16 },
+  messageText: { fontSize: 13, lineHeight: 18, textAlign: 'center' },
   footer: { alignItems: 'center', gap: 6, marginTop: 40 },
   footerText: { fontSize: 15 },
   footerLink: { fontSize: 15 },

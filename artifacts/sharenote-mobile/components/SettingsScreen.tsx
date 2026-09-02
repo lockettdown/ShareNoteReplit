@@ -33,7 +33,7 @@ export default function SettingsScreen() {
 
   function handleSignOut() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    signOut();
+    void signOut();
     router.replace('/');
   }
 

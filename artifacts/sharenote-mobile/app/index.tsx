@@ -5,16 +5,18 @@ import {
   Text,
   View,
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { Redirect, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import * as Haptics from 'expo-haptics';
 import { Feather } from '@expo/vector-icons';
+import { useAppState } from '@/context/AppState';
 
 export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { activeProfile, familyEmail, isAuthLoading, isFamilyStateLoading } = useAppState();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -28,6 +30,19 @@ export default function WelcomeScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     router.push('/sign-in');
   }
+
+  if (isAuthLoading || isFamilyStateLoading) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.loadingText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+          Loading ShareNote...
+        </Text>
+      </View>
+    );
+  }
+
+  if (familyEmail && activeProfile) return <Redirect href="/(tabs)" />;
+  if (familyEmail) return <Redirect href="/profile-select" />;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -117,6 +132,8 @@ export default function WelcomeScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, overflow: 'hidden' },
+  centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingText: { fontSize: 15 },
   orbTop: {
     position: 'absolute', width: '150%', height: '50%',
     borderRadius: 9999, left: '-25%', top: '-15%',

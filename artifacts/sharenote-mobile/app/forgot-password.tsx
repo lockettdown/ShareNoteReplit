@@ -13,25 +13,48 @@ import { Feather } from '@expo/vector-icons';
 import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { useAppState } from '@/context/AppState';
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { sendPasswordReset } = useAppState();
 
   const [email, setEmail] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSuccessMessage, setIsSuccessMessage] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  function handleSendReset() {
+  async function handleSendReset() {
     if (!email.trim()) {
+      setMessage('Enter your email address.');
+      setIsSuccessMessage(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
+
+    setIsSubmitting(true);
+    setMessage('');
+    setIsSuccessMessage(false);
+
+    const result = await sendPasswordReset(email);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setMessage(result.message ?? 'Unable to send a reset link.');
+      setIsSuccessMessage(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    setMessage(result.message ?? 'Check your email for a reset link.');
+    setIsSuccessMessage(true);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.back();
   }
 
   const inputContainerStyle = (field: string) => ({
@@ -94,20 +117,35 @@ export default function ForgotPasswordScreen() {
 
           <Pressable
             testID="send-reset-btn"
+            disabled={isSubmitting}
             style={({ pressed }) => [
               styles.submitButton,
               {
                 backgroundColor: colors.primary,
-                opacity: pressed ? 0.88 : 1,
+                opacity: isSubmitting ? 0.62 : pressed ? 0.88 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
             onPress={handleSendReset}
           >
             <Text style={[styles.submitButtonText, { color: '#ffffff', fontFamily: 'Inter_600SemiBold' }]}>
-              Send Reset Link
+              {isSubmitting ? 'Sending...' : 'Send Reset Link'}
             </Text>
           </Pressable>
+
+          {message ? (
+            <Text
+              style={[
+                styles.messageText,
+                {
+                  color: isSuccessMessage ? colors.accentTeal : colors.destructive,
+                  fontFamily: 'Inter_500Medium',
+                },
+              ]}
+            >
+              {message}
+            </Text>
+          ) : null}
 
           <Pressable onPress={() => router.back()} style={styles.backLink}>
             <Text style={[styles.backLinkText, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>
@@ -148,6 +186,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8,
   },
   submitButtonText: { fontSize: 16 },
+  messageText: { fontSize: 13, lineHeight: 18, textAlign: 'center' },
   backLink: { alignItems: 'center', marginTop: -4 },
   backLinkText: { fontSize: 15 },
 });

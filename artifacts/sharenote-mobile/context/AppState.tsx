@@ -1,4 +1,6 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import type { Session, User } from '@supabase/supabase-js';
+import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
   clearStoredActiveProfileId,
   clearStoredFamilyEmail,
@@ -64,6 +66,9 @@ export type GroceryItem = {
 };
 
 type AppStateContextType = {
+  authUser: User | null;
+  isAuthLoading: boolean;
+  isFamilyStateLoading: boolean;
   familyEmail: string;
   familyName: string;
   activeProfileId: string | null;
@@ -78,14 +83,20 @@ type AppStateContextType = {
   groceries: GroceryItem[];
   setFamilyName: (familyName: string) => void;
   setMembers: (members: FamilyMember[]) => void;
-  signInFamily: (familyEmail: string) => void;
-  signOut: () => void;
+  signInFamily: (familyEmail: string, password: string) => Promise<AuthActionResult>;
+  signOut: () => Promise<void>;
+  sendPasswordReset: (familyEmail: string) => Promise<AuthActionResult>;
   selectActiveProfile: (profileId: string) => void;
   clearActiveProfile: () => void;
   addMember: (member: Omit<FamilyMember, 'id'>) => void;
   updateMember: (id: string, member: Omit<FamilyMember, 'id'>) => void;
   deleteMember: (id: string) => void;
-  createFamily: (familyName: string, yourName: string, familyEmail: string) => void;
+  createFamily: (
+    familyName: string,
+    yourName: string,
+    familyEmail: string,
+    password: string,
+  ) => Promise<AuthActionResult>;
   addEvent: (event: Omit<AppEvent, 'id'>) => void;
   updateEvent: (id: string, event: Omit<AppEvent, 'id'>) => void;
   deleteEvent: (id: string) => void;
@@ -99,6 +110,23 @@ type AppStateContextType = {
 };
 
 const AppStateContext = createContext<AppStateContextType | null>(null);
+
+type AuthActionResult = {
+  ok: boolean;
+  message?: string;
+  needsEmailConfirmation?: boolean;
+};
+
+type PersistedAppState = {
+  familyName: string;
+  members: FamilyMember[];
+  dashboardMembers: FamilyMember[];
+  events: AppEvent[];
+  dashboardEvents: AppEvent[];
+  tasks: AppTask[];
+  profileTasks: AppTask[];
+  groceries: GroceryItem[];
+};
 
 const INITIAL_MEMBERS: FamilyMember[] = [
   { id: 'm1', name: 'David Smith', nickname: 'Dad', role: 'Parent', initials: 'DS', color: '#9b5cf6' },
@@ -144,8 +172,114 @@ const INITIAL_GROCERIES: GroceryItem[] = [
   { id: 'g7', name: 'Bread', category: 'Bakery', checked: true, displayOnDashboard: true },
 ];
 
+const INITIAL_REMOTE_STATE: PersistedAppState = {
+  familyName: 'Smith Family',
+  members: INITIAL_MEMBERS,
+  dashboardMembers: INITIAL_DASHBOARD_MEMBERS,
+  events: INITIAL_EVENTS,
+  dashboardEvents: INITIAL_DASHBOARD_EVENTS,
+  tasks: INITIAL_TASKS,
+  profileTasks: INITIAL_PROFILE_TASKS,
+  groceries: INITIAL_GROCERIES,
+};
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value));
+}
+
+function coercePersistedState(value: unknown): PersistedAppState | null {
+  if (!isRecord(value)) return null;
+
+  return {
+    familyName: typeof value.familyName === 'string' ? value.familyName : INITIAL_REMOTE_STATE.familyName,
+    members: Array.isArray(value.members) ? (value.members as FamilyMember[]) : INITIAL_REMOTE_STATE.members,
+    dashboardMembers: Array.isArray(value.dashboardMembers)
+      ? (value.dashboardMembers as FamilyMember[])
+      : INITIAL_REMOTE_STATE.dashboardMembers,
+    events: Array.isArray(value.events) ? (value.events as AppEvent[]) : INITIAL_REMOTE_STATE.events,
+    dashboardEvents: Array.isArray(value.dashboardEvents)
+      ? (value.dashboardEvents as AppEvent[])
+      : INITIAL_REMOTE_STATE.dashboardEvents,
+    tasks: Array.isArray(value.tasks) ? (value.tasks as AppTask[]) : INITIAL_REMOTE_STATE.tasks,
+    profileTasks: Array.isArray(value.profileTasks)
+      ? (value.profileTasks as AppTask[])
+      : INITIAL_REMOTE_STATE.profileTasks,
+    groceries: Array.isArray(value.groceries) ? (value.groceries as GroceryItem[]) : INITIAL_REMOTE_STATE.groceries,
+  };
+}
+
+function createInitialFamilyState(familyName: string, yourName: string): PersistedAppState {
+  const nameParts = yourName.split(/\s+/).filter(Boolean);
+  const initials = nameParts.map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'ME';
+  const creator: FamilyMember = {
+    id: `member-${Date.now()}`,
+    name: yourName,
+    nickname: nameParts[0] ?? yourName,
+    role: 'Parent',
+    initials,
+    color: '#9b5cf6',
+  };
+
+  return {
+    familyName,
+    members: [creator],
+    dashboardMembers: [creator],
+    events: [],
+    dashboardEvents: [],
+    tasks: [],
+    profileTasks: [],
+    groceries: [],
+  };
+}
+
+function createInitialFamilyStateForUser(user: User): PersistedAppState {
+  const metadata = user.user_metadata;
+  const familyName = typeof metadata.family_name === 'string' && metadata.family_name.trim()
+    ? metadata.family_name.trim()
+    : 'My Family';
+  const fallbackName = user.email?.split('@')[0] ?? 'Me';
+  const yourName = typeof metadata.display_name === 'string' && metadata.display_name.trim()
+    ? metadata.display_name.trim()
+    : fallbackName;
+
+  return createInitialFamilyState(familyName, yourName);
+}
+
+async function loadFamilyState(userId: string) {
+  if (!supabase) return null;
+
+  const { data, error } = await supabase
+    .from('family_states')
+    .select('state')
+    .eq('user_id', userId)
+    .maybeSingle();
+
+  if (error) throw error;
+
+  return coercePersistedState((data as { state?: unknown } | null)?.state);
+}
+
+async function saveFamilyState(userId: string, familyEmail: string, state: PersistedAppState) {
+  if (!supabase) return;
+
+  const { error } = await supabase.from('family_states').upsert(
+    {
+      user_id: userId,
+      family_email: familyEmail,
+      state,
+      updated_at: new Date().toISOString(),
+    },
+    { onConflict: 'user_id' },
+  );
+
+  if (error) throw error;
+}
+
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const storedFamilyEmail = getStoredFamilyEmail();
+  const [authSession, setAuthSession] = useState<Session | null>(null);
+  const [authUser, setAuthUser] = useState<User | null>(null);
+  const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured);
   const [familyEmail, setFamilyEmail] = useState(storedFamilyEmail);
   const [familyName, setFamilyName] = useState('Smith Family');
   const [members, setMembers] = useState<FamilyMember[]>(INITIAL_MEMBERS);
@@ -158,6 +292,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [activeProfileId, setActiveProfileId] = useState<string | null>(
     getStoredActiveProfileId(storedFamilyEmail),
   );
+  const [hasLoadedRemoteState, setHasLoadedRemoteState] = useState(
+    !storedFamilyEmail || !isSupabaseConfigured,
+  );
+  const [canPersistRemoteState, setCanPersistRemoteState] = useState(isSupabaseConfigured);
+  const skipNextRemoteLoadRef = useRef<string | null>(null);
 
   const allMembers = [
     ...members,
@@ -166,21 +305,203 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const activeProfile = allMembers.find((member) => member.id === activeProfileId) ?? null;
   const canManageFamily = profileCanManage(activeProfile);
 
-  function signInFamily(submittedFamilyEmail: string) {
-    const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
-    if (!normalizedFamilyEmail) return;
-    const storedProfileId = getStoredActiveProfileId(normalizedFamilyEmail);
-
-    setFamilyEmail(normalizedFamilyEmail);
-    setActiveProfileId(storedProfileId);
-    storeFamilyEmail(normalizedFamilyEmail);
+  function applyPersistedState(nextState: PersistedAppState) {
+    setFamilyName(nextState.familyName);
+    setMembers(nextState.members);
+    setDashboardMembers(nextState.dashboardMembers);
+    setEvents(nextState.events);
+    setDashboardEvents(nextState.dashboardEvents);
+    setTasks(nextState.tasks);
+    setProfileTasks(nextState.profileTasks);
+    setGroceries(nextState.groceries);
   }
 
-  function signOut() {
+  function applySignedInSession(nextSession: Session | null) {
+    const nextUser = nextSession?.user ?? null;
+    const nextFamilyEmail = normalizeFamilyEmail(nextUser?.email ?? '');
+
+    setAuthSession(nextSession);
+    setAuthUser(nextUser);
+
+    if (!nextUser || !nextFamilyEmail) {
+      clearStoredActiveProfileId(familyEmail);
+      clearStoredFamilyEmail();
+      setFamilyEmail('');
+      setActiveProfileId(null);
+      applyPersistedState(INITIAL_REMOTE_STATE);
+      setHasLoadedRemoteState(true);
+      setCanPersistRemoteState(isSupabaseConfigured);
+      return;
+    }
+
+    setFamilyEmail(nextFamilyEmail);
+    setActiveProfileId(getStoredActiveProfileId(nextFamilyEmail));
+    storeFamilyEmail(nextFamilyEmail);
+  }
+
+  useEffect(() => {
+    if (!supabase) {
+      setIsAuthLoading(false);
+      return;
+    }
+
+    let mounted = true;
+
+    supabase.auth.getSession().then(({ data, error }) => {
+      if (!mounted) return;
+      if (error) {
+        console.warn('Unable to read Supabase session.', error);
+      }
+      applySignedInSession(data.session);
+      setIsAuthLoading(false);
+    });
+
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+      if (!mounted) return;
+      applySignedInSession(nextSession);
+      setIsAuthLoading(false);
+    });
+
+    return () => {
+      mounted = false;
+      listener.subscription.unsubscribe();
+    };
+  }, []);
+
+  useEffect(() => {
+    const userId = authUser?.id;
+
+    if (!familyEmail || !isSupabaseConfigured || !userId) {
+      setHasLoadedRemoteState(true);
+      return;
+    }
+
+    if (skipNextRemoteLoadRef.current === userId) {
+      skipNextRemoteLoadRef.current = null;
+      setCanPersistRemoteState(true);
+      setHasLoadedRemoteState(true);
+      return;
+    }
+
+    let cancelled = false;
+
+    setCanPersistRemoteState(true);
+    setHasLoadedRemoteState(false);
+
+    loadFamilyState(userId)
+      .then((remoteState) => {
+        if (cancelled) return;
+        applyPersistedState(remoteState ?? createInitialFamilyStateForUser(authUser));
+        setHasLoadedRemoteState(true);
+      })
+      .catch((error) => {
+        if (cancelled) return;
+        console.warn('Unable to load family state from Supabase.', error);
+        setCanPersistRemoteState(false);
+        setHasLoadedRemoteState(true);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authUser?.id, familyEmail]);
+
+  useEffect(() => {
+    if (
+      !authUser?.id
+      || !familyEmail
+      || !isSupabaseConfigured
+      || !hasLoadedRemoteState
+      || !canPersistRemoteState
+    ) {
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      saveFamilyState(authUser.id, familyEmail, {
+        familyName,
+        members,
+        dashboardMembers,
+        events,
+        dashboardEvents,
+        tasks,
+        profileTasks,
+        groceries,
+      }).catch((error) => {
+        console.warn('Unable to save family state to Supabase.', error);
+        setCanPersistRemoteState(false);
+      });
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [
+    canPersistRemoteState,
+    dashboardEvents,
+    dashboardMembers,
+    events,
+    authUser?.id,
+    familyEmail,
+    familyName,
+    groceries,
+    hasLoadedRemoteState,
+    members,
+    profileTasks,
+    tasks,
+  ]);
+
+  async function signInFamily(submittedFamilyEmail: string, password: string): Promise<AuthActionResult> {
+    const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
+    const normalizedPassword = password.trim();
+    if (!normalizedFamilyEmail || !normalizedPassword) {
+      return { ok: false, message: 'Enter your email and password.' };
+    }
+
+    if (!supabase) {
+      const storedProfileId = getStoredActiveProfileId(normalizedFamilyEmail);
+      setFamilyEmail(normalizedFamilyEmail);
+      setActiveProfileId(storedProfileId);
+      storeFamilyEmail(normalizedFamilyEmail);
+      return { ok: true };
+    }
+
+    const { data, error } = await supabase.auth.signInWithPassword({
+      email: normalizedFamilyEmail,
+      password: normalizedPassword,
+    });
+
+    if (error) return { ok: false, message: error.message };
+    if (!data.session || !data.user) {
+      return { ok: false, message: 'Supabase did not return a signed-in session.' };
+    }
+
+    applySignedInSession(data.session);
+    return { ok: true };
+  }
+
+  async function signOut() {
     clearStoredActiveProfileId(familyEmail);
+    setAuthSession(null);
+    setAuthUser(null);
     setFamilyEmail('');
     setActiveProfileId(null);
     clearStoredFamilyEmail();
+    applyPersistedState(INITIAL_REMOTE_STATE);
+    if (supabase && authSession) {
+      await supabase.auth.signOut();
+    }
+  }
+
+  async function sendPasswordReset(submittedFamilyEmail: string): Promise<AuthActionResult> {
+    const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
+    if (!normalizedFamilyEmail) return { ok: false, message: 'Enter your email address.' };
+    if (!supabase) return { ok: false, message: 'Supabase is not configured for this app.' };
+
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedFamilyEmail);
+    if (error) return { ok: false, message: error.message };
+
+    return { ok: true, message: 'Check your email for a reset link.' };
   }
 
   function selectActiveProfile(profileId: string) {
@@ -193,35 +514,63 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     clearStoredActiveProfileId(familyEmail);
   }
 
-  function createFamily(submittedFamilyName: string, submittedYourName: string, submittedFamilyEmail: string) {
+  async function createFamily(
+    submittedFamilyName: string,
+    submittedYourName: string,
+    submittedFamilyEmail: string,
+    password: string,
+  ): Promise<AuthActionResult> {
     const normalizedFamilyName = submittedFamilyName.trim();
     const normalizedYourName = submittedYourName.trim();
     const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
-    if (!normalizedFamilyName || !normalizedYourName || !normalizedFamilyEmail) return;
+    const normalizedPassword = password.trim();
+    if (!normalizedFamilyName || !normalizedYourName || !normalizedFamilyEmail || !normalizedPassword) {
+      return { ok: false, message: 'Complete every field to create your family.' };
+    }
 
-    const nameParts = normalizedYourName.split(/\s+/).filter(Boolean);
-    const initials = nameParts.map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'ME';
-    const creator: FamilyMember = {
-      id: `member-${Date.now()}`,
-      name: normalizedYourName,
-      nickname: nameParts[0] ?? normalizedYourName,
-      role: 'Parent',
-      initials,
-      color: '#9b5cf6',
-    };
+    const nextState = createInitialFamilyState(normalizedFamilyName, normalizedYourName);
+    let canPersistNewState = isSupabaseConfigured;
 
-    setFamilyName(normalizedFamilyName);
-    setFamilyEmail(normalizedFamilyEmail);
-    setMembers([creator]);
-    setDashboardMembers([creator]);
-    setEvents([]);
-    setDashboardEvents([]);
-    setTasks([]);
-    setProfileTasks([]);
-    setGroceries([]);
+    if (supabase) {
+      const { data, error } = await supabase.auth.signUp({
+        email: normalizedFamilyEmail,
+        password: normalizedPassword,
+        options: {
+          data: {
+            display_name: normalizedYourName,
+            family_name: normalizedFamilyName,
+          },
+        },
+      });
+
+      if (error) return { ok: false, message: error.message };
+      if (!data.session || !data.user) {
+        return {
+          ok: true,
+          needsEmailConfirmation: true,
+          message: 'Check your email to confirm the new account, then sign in.',
+        };
+      }
+
+      applySignedInSession(data.session);
+      skipNextRemoteLoadRef.current = data.user.id;
+      try {
+        await saveFamilyState(data.user.id, normalizedFamilyEmail, nextState);
+      } catch (error) {
+        console.warn('Unable to save the new family state to Supabase.', error);
+        canPersistNewState = false;
+      }
+    } else {
+      setFamilyEmail(normalizedFamilyEmail);
+      storeFamilyEmail(normalizedFamilyEmail);
+    }
+
+    applyPersistedState(nextState);
+    setCanPersistRemoteState(canPersistNewState);
+    setHasLoadedRemoteState(true);
     setActiveProfileId(null);
-    storeFamilyEmail(normalizedFamilyEmail);
     clearStoredActiveProfileId(normalizedFamilyEmail);
+    return { ok: true };
   }
 
   function addMember(member: Omit<FamilyMember, 'id'>) {
@@ -314,9 +663,10 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppStateContext.Provider
       value={{
+        authUser, isAuthLoading, isFamilyStateLoading: Boolean(familyEmail && isSupabaseConfigured && !hasLoadedRemoteState),
         familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
         members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
-        setFamilyName, setMembers, signInFamily, signOut, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
+        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
         addGroceryItem, toggleGroceryItem, removeGroceryItem,
       }}
     >

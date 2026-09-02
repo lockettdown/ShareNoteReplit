@@ -1,6 +1,7 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
+import { useEffect } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '@/components/MemberAvatar';
@@ -14,6 +15,8 @@ export default function ProfileSelectScreen() {
   const colors = useColors();
   const {
     familyEmail,
+    isAuthLoading,
+    isFamilyStateLoading,
     members,
     dashboardMembers,
     activeProfileId,
@@ -24,6 +27,12 @@ export default function ProfileSelectScreen() {
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
+  useEffect(() => {
+    if (!isAuthLoading && !familyEmail) {
+      router.replace('/sign-in');
+    }
+  }, [familyEmail, isAuthLoading, router]);
+
   function chooseProfile(profileId: string) {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     selectActiveProfile(profileId);
@@ -32,8 +41,18 @@ export default function ProfileSelectScreen() {
 
   function useDifferentEmail() {
     Haptics.selectionAsync();
-    signOut();
+    void signOut();
     router.replace('/sign-in');
+  }
+
+  if (isAuthLoading || isFamilyStateLoading) {
+    return (
+      <View style={[styles.root, styles.centered, { backgroundColor: colors.background }]}>
+        <Text style={[styles.loadingText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+          Loading family profiles...
+        </Text>
+      </View>
+    );
   }
 
   return (
@@ -126,6 +145,8 @@ export default function ProfileSelectScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
+  centered: { alignItems: 'center', justifyContent: 'center', padding: 24 },
+  loadingText: { fontSize: 15 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, gap: 28 },
   header: { alignItems: 'center', gap: 10 },

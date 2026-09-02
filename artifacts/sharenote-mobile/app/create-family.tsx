@@ -25,18 +25,46 @@ export default function CreateFamilyScreen() {
   const [yourName, setYourName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [message, setMessage] = useState('');
+  const [isSuccessMessage, setIsSuccessMessage] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  function handleSubmit() {
+  async function handleSubmit() {
     const normalizedFamilyName = familyName.trim();
     const normalizedYourName = yourName.trim();
     const normalizedEmail = email.trim();
-    if (!normalizedFamilyName || !normalizedYourName || !normalizedEmail || !password.trim()) return;
+    if (!normalizedFamilyName || !normalizedYourName || !normalizedEmail || !password.trim()) {
+      setMessage('Complete every field to create your family.');
+      setIsSuccessMessage(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
 
-    createFamily(normalizedFamilyName, normalizedYourName, normalizedEmail);
+    setIsSubmitting(true);
+    setMessage('');
+    setIsSuccessMessage(false);
+
+    const result = await createFamily(normalizedFamilyName, normalizedYourName, normalizedEmail, password);
+    setIsSubmitting(false);
+
+    if (!result.ok) {
+      setMessage(result.message ?? 'Unable to create your family.');
+      setIsSuccessMessage(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      return;
+    }
+
+    if (result.needsEmailConfirmation) {
+      setMessage(result.message ?? 'Check your email to confirm the new account.');
+      setIsSuccessMessage(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      return;
+    }
+
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     router.replace('/profile-select');
   }
@@ -162,20 +190,35 @@ export default function CreateFamilyScreen() {
 
           <Pressable
             testID="submit-btn"
+            disabled={isSubmitting}
             style={({ pressed }) => [
               styles.submitButton,
               {
                 backgroundColor: colors.primary,
-                opacity: pressed ? 0.88 : 1,
+                opacity: isSubmitting ? 0.62 : pressed ? 0.88 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
             onPress={handleSubmit}
           >
             <Text style={[styles.submitButtonText, { color: '#ffffff', fontFamily: 'Inter_600SemiBold' }]}>
-              Create Family
+              {isSubmitting ? 'Creating...' : 'Create Family'}
             </Text>
           </Pressable>
+
+          {message ? (
+            <Text
+              style={[
+                styles.messageText,
+                {
+                  color: isSuccessMessage ? colors.accentTeal : colors.destructive,
+                  fontFamily: 'Inter_500Medium',
+                },
+              ]}
+            >
+              {message}
+            </Text>
+          ) : null}
         </View>
 
         <View style={styles.footer}>
@@ -222,6 +265,7 @@ const styles = StyleSheet.create({
     height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center', marginTop: 8,
   },
   submitButtonText: { fontSize: 16 },
+  messageText: { fontSize: 13, lineHeight: 18, textAlign: 'center' },
   footer: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6, marginTop: 40 },
   footerText: { fontSize: 15 },
   footerLink: { fontSize: 15 },
