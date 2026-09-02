@@ -37,7 +37,7 @@ export default function ForgotPasswordScreen() {
   const inputContainerStyle = (field: string) => ({
     ...styles.inputContainer,
     borderColor: focusedField === field ? colors.primary : colors.border,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   });
 
   return (
@@ -55,14 +55,14 @@ export default function ForgotPasswordScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.backButton,
-            { backgroundColor: '#fff', opacity: pressed ? 0.8 : 1 },
+            { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1 },
           ]}
           onPress={() => router.back()}
         >
           <Feather name="arrow-left" size={20} color={colors.foreground} />
         </Pressable>
 
-        <View style={[styles.card, { backgroundColor: '#fff', shadowColor: colors.primary }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
           <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
             Forgot Password?
           </Text>
@@ -134,7 +134,7 @@ const styles = StyleSheet.create({
     borderRadius: 24, padding: 24, gap: 24,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
   },
-  title: { fontSize: 24, letterSpacing: -0.6 },
+  title: { fontSize: 24 },
   subtitle: { fontSize: 15, lineHeight: 22 },
   fieldGroup: { gap: 8 },
   label: { fontSize: 14 },

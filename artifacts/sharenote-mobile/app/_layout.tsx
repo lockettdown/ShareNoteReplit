@@ -27,6 +27,7 @@ function RootLayoutNav() {
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="create-family" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
+      <Stack.Screen name="profile-select" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
       <Stack.Screen name="add-event" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="add-task" options={{ headerShown: false, presentation: 'modal' }} />

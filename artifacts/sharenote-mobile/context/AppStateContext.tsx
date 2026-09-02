@@ -7,4 +7,5 @@ export type {
   AppTask,
   FamilyMember,
   GroceryItem,
+  RepeatOption,
 } from './AppState';

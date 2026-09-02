@@ -32,8 +32,8 @@ export default function WelcomeScreen() {
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       {/* Soft gradient background simulation */}
-      <View style={[styles.orbTop, { backgroundColor: '#e9d5ff' }]} />
-      <View style={[styles.orbBottom, { backgroundColor: '#dbeafe' }]} />
+      <View style={[styles.orbTop, { backgroundColor: colors.orbPurple }]} />
+      <View style={[styles.orbBottom, { backgroundColor: colors.orbBlue }]} />
 
       <View
         style={[
@@ -70,7 +70,7 @@ export default function WelcomeScreen() {
               styles.primaryButton,
               {
                 backgroundColor: colors.primary,
-                shadowColor: colors.primary,
+                shadowColor: colors.shadow,
                 opacity: pressed ? 0.88 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
@@ -92,8 +92,8 @@ export default function WelcomeScreen() {
             style={({ pressed }) => [
               styles.secondaryButton,
               {
-                backgroundColor: '#ffffff',
-                shadowColor: colors.primary,
+                backgroundColor: colors.card,
+                shadowColor: colors.shadow,
                 opacity: pressed ? 0.88 : 1,
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
@@ -132,13 +132,13 @@ const styles = StyleSheet.create({
   },
   hero: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   logoContainer: {
-    width: 100, height: 100, backgroundColor: '#fff',
+    width: 100, height: 100, backgroundColor: '#ffffff',
     borderRadius: 28, alignItems: 'center', justifyContent: 'center',
     shadowOffset: { width: 0, height: 12 },
     shadowOpacity: 0.1, shadowRadius: 24, elevation: 8,
     marginBottom: 32,
   },
-  title: { fontSize: 32, letterSpacing: -0.8, textAlign: 'center', marginBottom: 12 },
+  title: { fontSize: 32, textAlign: 'center', marginBottom: 12 },
   subtitle: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   actions: { gap: 16 },
   primaryButton: {
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
   primaryButtonText: { fontSize: 16 },
   secondaryButton: {
     height: 56, borderRadius: 9999, alignItems: 'center', justifyContent: 'center',
-    borderWidth: 1, borderColor: '#e9d5ff',
+    borderWidth: 1, borderColor: '#e1d8f2',
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   secondaryButtonText: { fontSize: 16 },

@@ -1,4 +1,5 @@
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -9,9 +10,16 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
-import { useAppState } from '@/context/AppState';
+import { AppEvent, AppTask, useAppState } from '@/context/AppState';
 import { useState } from 'react';
+import * as Haptics from 'expo-haptics';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { EventDetailSheet } from '@/components/EventDetailSheet';
+import { TaskDetailSheet } from '@/components/TaskDetailSheet';
+import { AssignedMemberAvatars } from '@/components/AssignedMemberAvatars';
+import { useRouter } from 'expo-router';
+import { getAssignedMembers } from '@/utils/assignments';
+import { itemOccursOn, toCanonicalDate } from '@/utils/schedule';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
@@ -32,10 +40,6 @@ function buildCalendarGrid(year: number, month: number) {
   return rows;
 }
 
-function toCanonicalDate(year: number, month: number, day: number) {
-  return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-}
-
 function timeToMinutes(time: string) {
   const match = time.match(/(\d{1,2}):(\d{2})\s*(AM|PM)/i);
   if (!match) return Number.MAX_SAFE_INTEGER;
@@ -50,22 +54,44 @@ function timeToMinutes(time: string) {
 export default function CalendarScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { events, members } = useAppState();
+  const router = useRouter();
+  const { events, dashboardEvents, tasks, members, dashboardMembers, activeProfile, canManageFamily, deleteEvent, deleteTask } = useAppState();
 
   const [viewYear, setViewYear] = useState(2025);
   const [viewMonth, setViewMonth] = useState(7); // August
   const [selectedDay, setSelectedDay] = useState(12);
+  const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
+  const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
+  const [showQuickAdd, setShowQuickAdd] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const grid = buildCalendarGrid(viewYear, viewMonth);
+  const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
+  const allEvents = [...events, ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id))];
 
   const selectedDate = toCanonicalDate(viewYear, viewMonth, selectedDay);
-  const displayEvents = events
-    .filter((event) => event.date === selectedDate)
+  const displayItems = [
+    ...allEvents.map((event) => ({ ...event, kind: 'event' as const })),
+    ...tasks.map((task) => ({ ...task, kind: 'task' as const })),
+  ]
+    .filter((event) => itemOccursOn(event, selectedDate))
     .sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
-  const selectedDateLabel = `Events for ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
+  const selectedDateLabel = `Schedule for ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
+  const dotsByDay = [...allEvents, ...tasks].reduce<Record<number, string[]>>((acc, item) => {
+    for (let day = 1; day <= new Date(viewYear, viewMonth + 1, 0).getDate(); day++) {
+      const dayDate = toCanonicalDate(viewYear, viewMonth, day);
+      if (!itemOccursOn(item, dayDate)) continue;
+      const colorsForDay = acc[day] ?? [];
+      const assignedColors = getAssignedMembers(item, allMembers).map((member) => member.color);
+      const nextColors = assignedColors.length ? assignedColors : [item.color];
+      acc[day] = [...colorsForDay, ...nextColors]
+        .filter((color, index, colors) => colors.indexOf(color) === index)
+        .slice(0, 3);
+    }
+    return acc;
+  }, {});
 
   function changeMonth(offset: number) {
     const nextMonth = viewMonth + offset;
@@ -80,22 +106,72 @@ export default function CalendarScreen() {
     }
   }
 
+  function editSelectedEvent(event: AppEvent) {
+    if (!canManageFamily) return;
+    setSelectedEvent(null);
+    router.push({
+      pathname: '/add-event',
+      params: { editEventId: event.id },
+    });
+  }
+
+  function deleteSelectedEvent(event: AppEvent) {
+    if (!canManageFamily) return;
+    deleteEvent(event.id);
+    setSelectedEvent(null);
+  }
+
+  function editSelectedTask(task: AppTask) {
+    if (!canManageFamily) return;
+    setSelectedTask(null);
+    router.push({
+      pathname: '/add-task',
+      params: { editTaskId: task.id },
+    });
+  }
+
+  function deleteSelectedTask(task: AppTask) {
+    if (!canManageFamily) return;
+    deleteTask(task.id);
+    setSelectedTask(null);
+  }
+
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <View style={styles.headerLeft}>
-          <MemberAvatar member={members[0]} size={32} headerPhoto />
-        </View>
+        <Pressable
+          accessibilityLabel="Switch active profile"
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push('/profile-select');
+          }}
+          style={styles.headerLeft}
+        >
+          <MemberAvatar member={activeProfile ?? members[0]} size={32} headerPhoto={!activeProfile} />
+        </Pressable>
         <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
           Calendar
         </Text>
-        <Pressable style={styles.headerRight}>
-          <Feather name="bell" size={20} color={colors.foreground} />
-        </Pressable>
+        <View style={styles.headerRight}>
+          {canManageFamily ? (
+            <Pressable
+              accessibilityLabel="Add event or task"
+              onPress={() => {
+                setShowQuickAdd(true);
+              }}
+              style={[styles.headerIconButton, { backgroundColor: colors.secondary }]}
+            >
+              <Feather name="plus" size={20} color={colors.primaryStrong} />
+            </Pressable>
+          ) : null}
+          <Pressable accessibilityLabel="Alerts" style={styles.headerIconButton}>
+            <Feather name="bell" size={20} color={colors.primaryStrong} />
+          </Pressable>
+        </View>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
-        <View style={[styles.calendarCard, { backgroundColor: '#fff', shadowColor: colors.primary }]}>
+        <View style={[styles.calendarCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
           <View style={styles.monthHeader}>
             <Pressable onPress={() => changeMonth(-1)} style={styles.navBtn}>
               <Feather name="chevron-left" size={20} color={colors.foreground} />
@@ -121,17 +197,7 @@ export default function CalendarScreen() {
                   const isSelected = day === selectedDay;
                   const isToday = viewYear === 2025 && viewMonth === 7 && day === 26; // hardcoded to match figma
 
-                  // Mock dots to match Figma: 2 has blue dot, 5 has green+yellow, 12 has blue+green+purple, 15 has pink, 23 has purple, 26 has orange
-                  const getDots = (d: number | null) => {
-                    if (d === 2) return ['#3b82f6'];
-                    if (d === 5) return ['#059669', '#eab308'];
-                    if (d === 12) return ['#3b82f6', '#059669', '#8b5cf6'];
-                    if (d === 15) return ['#e11d48'];
-                    if (d === 23) return ['#8b5cf6'];
-                    if (d === 26) return ['#f59e0b'];
-                    return [];
-                  };
-                  const dots = getDots(day);
+                  const dots = day ? dotsByDay[day] ?? [] : [];
 
                   return (
                     <Pressable
@@ -142,7 +208,7 @@ export default function CalendarScreen() {
                       {day !== null && (
                         <View style={[
                           styles.dayBackground,
-                          isSelected && { backgroundColor: '#f4f0ff' },
+                          isSelected && { backgroundColor: colors.secondary },
                           isToday && { backgroundColor: colors.primary }
                         ]}>
                           <Text style={[
@@ -174,30 +240,122 @@ export default function CalendarScreen() {
             {selectedDateLabel}
           </Text>
 
-          {displayEvents.map((evt) => {
-            const person = members.find(m => m.id === evt.personId);
+          {displayItems.map((item) => {
+            const assignedMembers = getAssignedMembers(item, allMembers);
             return (
-              <View key={evt.id} style={[styles.eventCard, { backgroundColor: '#fff', shadowColor: colors.primary }]}>
-                <View style={[styles.cardLeftBorder, { backgroundColor: evt.color }]} />
+              <Pressable
+                key={`${item.kind}-${item.id}`}
+                onPress={() => {
+                  if (item.kind === 'event') setSelectedEvent(item);
+                  if (item.kind === 'task') setSelectedTask(item);
+                }}
+                style={[styles.eventCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
+              >
+                <View style={[styles.cardLeftBorder, { backgroundColor: item.color }]} />
+                <View style={[styles.itemIcon, { backgroundColor: colors.secondary }]}>
+                  <Feather
+                    name={item.kind === 'event' ? 'calendar' : 'check-square'}
+                    size={18}
+                    color={colors.primaryStrong}
+                  />
+                </View>
                 <View style={styles.eventContent}>
                   <Text style={[styles.eventTime, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
-                    {evt.time}
+                    {item.time}
                   </Text>
                   <Text style={[styles.eventTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-                    {evt.title}
-                  </Text>
-                </View>
-                {person && <MemberAvatar member={person} size={36} />}
+                  {item.title}
+                </Text>
               </View>
+                <AssignedMemberAvatars members={assignedMembers} />
+              </Pressable>
             );
           })}
-          {displayEvents.length === 0 && (
+          {displayItems.length === 0 && (
             <Text style={[styles.emptyState, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              No events scheduled for this day.
+              No events or tasks scheduled for this day.
             </Text>
           )}
         </View>
       </ScrollView>
+
+      <EventDetailSheet
+        event={selectedEvent}
+        members={allMembers}
+        visible={selectedEvent !== null}
+        canManage={canManageFamily}
+        onClose={() => setSelectedEvent(null)}
+        onEdit={editSelectedEvent}
+        onDelete={deleteSelectedEvent}
+      />
+      <TaskDetailSheet
+        task={selectedTask}
+        members={allMembers}
+        visible={selectedTask !== null}
+        canManage={canManageFamily}
+        onClose={() => setSelectedTask(null)}
+        onEdit={editSelectedTask}
+        onDelete={deleteSelectedTask}
+      />
+
+      <Modal visible={canManageFamily && showQuickAdd} transparent animationType="fade" onRequestClose={() => setShowQuickAdd(false)}>
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowQuickAdd(false)} />
+          <View style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: bottomPad + 24 }]}>
+            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
+                Add
+              </Text>
+              <Pressable onPress={() => setShowQuickAdd(false)} hitSlop={12}>
+                <Feather name="x" size={24} color={colors.foreground} />
+              </Pressable>
+            </View>
+
+            <Pressable
+              style={[styles.modalOption, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowQuickAdd(false);
+                router.push('/add-event');
+              }}
+            >
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="calendar" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                  Add Event
+                </Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  Schedule something on the calendar
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.border} />
+            </Pressable>
+
+            <Pressable
+              style={[styles.modalOption, { borderColor: colors.border }]}
+              onPress={() => {
+                setShowQuickAdd(false);
+                router.push('/add-task');
+              }}
+            >
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="check-square" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                  Add Task
+                </Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  Add a task to a family schedule
+                </Text>
+              </View>
+              <Feather name="chevron-right" size={20} color={colors.border} />
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -205,8 +363,9 @@ export default function CalendarScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 },
-  headerLeft: { width: 32 },
-  headerRight: { width: 32, alignItems: 'flex-end' },
+  headerLeft: { width: 84 },
+  headerRight: { width: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
+  headerIconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 },
@@ -227,15 +386,26 @@ const styles = StyleSheet.create({
   dotsRow: { flexDirection: 'row', gap: 4, marginTop: 4, height: 4 },
   dot: { width: 5, height: 5, borderRadius: 2.5 },
   eventsSection: { gap: 16 },
-  sectionTitle: { fontSize: 22, letterSpacing: -0.5 },
+  sectionTitle: { fontSize: 22 },
   eventCard: {
     borderRadius: 20, flexDirection: 'row', alignItems: 'center', padding: 20,
     shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2,
     overflow: 'hidden',
   },
   cardLeftBorder: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 },
+  itemIcon: { width: 36, height: 36, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   eventContent: { flex: 1, paddingLeft: 8, gap: 4 },
   eventTime: { fontSize: 13 },
   eventTitle: { fontSize: 16 },
   emptyState: { fontSize: 15, textAlign: 'center', paddingVertical: 12 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, gap: 16 },
+  modalDragHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 },
+  modalTitle: { fontSize: 24 },
+  modalOption: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, borderWidth: 1, gap: 16 },
+  modalOptionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  modalOptionTextWrapper: { flex: 1, gap: 4 },
+  modalOptionTitle: { fontSize: 16 },
+  modalOptionSubtitle: { fontSize: 13 },
 });

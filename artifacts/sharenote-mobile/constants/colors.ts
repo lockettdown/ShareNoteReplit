@@ -1,53 +1,64 @@
 /**
  * ShareNote design tokens — derived from the Figma design (key: 5qer5C4vmD9pfCspOcjHay).
- * Primary: #935bf0 purple · Background: #f4f0ff lavender
- * Strong purple (#7236cd) used for section headings per Figma.
+ * Primary: #9b5cf6 purple · Background: #f4efff lavender
+ * Strong purple (#7437d8) used for section headings per Figma.
  */
 
 const colors = {
   light: {
     // Legacy aliases
-    text: '#1c1b1b',
-    tint: '#935bf0',
+    text: '#25232b',
+    tint: '#9b5cf6',
 
     // Core surfaces
-    background: '#f4f0ff',
-    foreground: '#1c1b1b',
+    background: '#f4efff',
+    foreground: '#25232b',
 
     // Cards / elevated surfaces
     card: '#ffffff',
-    cardForeground: '#1c1b1b',
+    cardForeground: '#25232b',
+    cardSoft: '#fbf9ff',
+    chip: '#f7f4fb',
+    tabBar: '#F4F0FF',
 
     // Primary action (buttons, links, active states)
-    primary: '#935bf0',
+    primary: '#9b5cf6',
     primaryForeground: '#ffffff',
 
-    // Stronger purple — used for section headings (Figma: #7236cd)
-    primaryStrong: '#7236cd',
+    // Stronger purple — used for section headings.
+    primaryStrong: '#7437d8',
 
     // Secondary surfaces (icon backgrounds, toggles)
-    secondary: '#ede8ff',
-    secondaryForeground: '#935bf0',
+    secondary: '#efe8ff',
+    secondaryForeground: '#7437d8',
 
     // Muted / subdued elements
-    muted: '#f0ecff',
-    mutedForeground: '#4a4454',
+    muted: '#eee7fb',
+    mutedForeground: '#625b6f',
 
     // Accent highlights (drag handles, orbs)
-    accent: '#d4bbff',
-    accentForeground: '#1c1b1b',
+    accent: '#d9c3ff',
+    accentForeground: '#25232b',
+    accentTeal: '#12c7a0',
+    accentPink: '#f04e9b',
+    accentOrange: '#f6a53a',
+    accentBlue: '#5bb6ff',
+    accentDangerSoft: '#fff0f7',
 
     // Destructive actions
-    destructive: '#ef4444',
+    destructive: '#e83f88',
     destructiveForeground: '#ffffff',
 
     // Borders and input outlines
-    border: '#e8e0f7',
-    input: '#e8e0f7',
+    border: '#e1d8f2',
+    input: '#e1d8f2',
+    divider: '#ece6f5',
+    overlay: 'rgba(37, 35, 43, 0.5)',
+    shadow: '#9b5cf6',
 
     // Decorative orb colors (Login screen)
-    orbPurple: '#d4bbff',
-    orbBlue: '#a4c9ff',
+    orbPurple: '#e6d8ff',
+    orbBlue: '#d7efff',
   },
 
   dark: {
@@ -57,7 +68,10 @@ const colors = {
     foreground: '#f0ebff',
     card: '#1e1830',
     cardForeground: '#f0ebff',
-    primary: '#935bf0',
+    cardSoft: '#251d3a',
+    chip: '#2b243a',
+    tabBar: '#F4F0FF',
+    primary: '#9b5cf6',
     primaryForeground: '#ffffff',
     primaryStrong: '#b088f5',
     secondary: '#2d1f5c',
@@ -66,10 +80,18 @@ const colors = {
     mutedForeground: '#8b7ab0',
     accent: '#3a2870',
     accentForeground: '#f0ebff',
+    accentTeal: '#2dd4bf',
+    accentPink: '#f472b6',
+    accentOrange: '#fbbf24',
+    accentBlue: '#60a5fa',
+    accentDangerSoft: '#3a1b31',
     destructive: '#ef4444',
     destructiveForeground: '#ffffff',
     border: '#2d1f5c',
     input: '#2d1f5c',
+    divider: '#2d1f5c',
+    overlay: 'rgba(10, 8, 16, 0.65)',
+    shadow: '#000000',
     orbPurple: '#3a2870',
     orbBlue: '#1a2e5a',
   },

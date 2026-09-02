@@ -33,17 +33,18 @@ export default function CreateFamilyScreen() {
   function handleSubmit() {
     const normalizedFamilyName = familyName.trim();
     const normalizedYourName = yourName.trim();
-    if (!normalizedFamilyName || !normalizedYourName) return;
+    const normalizedEmail = email.trim();
+    if (!normalizedFamilyName || !normalizedYourName || !normalizedEmail || !password.trim()) return;
 
-    createFamily(normalizedFamilyName, normalizedYourName);
+    createFamily(normalizedFamilyName, normalizedYourName, normalizedEmail);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/(tabs)');
+    router.replace('/profile-select');
   }
 
   const inputContainerStyle = (field: string) => ({
     ...styles.inputContainer,
     borderColor: focusedField === field ? colors.primary : colors.border,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   });
 
   return (
@@ -61,7 +62,7 @@ export default function CreateFamilyScreen() {
         <Pressable
           style={({ pressed }) => [
             styles.backButton,
-            { backgroundColor: '#fff', opacity: pressed ? 0.8 : 1 },
+            { backgroundColor: colors.card, opacity: pressed ? 0.8 : 1 },
           ]}
           onPress={() => router.back()}
         >
@@ -77,7 +78,7 @@ export default function CreateFamilyScreen() {
           </Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: '#fff', shadowColor: colors.primary }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
               Family Name
@@ -203,7 +204,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2,
   },
   header: { marginBottom: 24 },
-  title: { fontSize: 32, letterSpacing: -0.8, marginBottom: 8 },
+  title: { fontSize: 32, marginBottom: 8 },
   subtitle: { fontSize: 15 },
   card: {
     borderRadius: 24, padding: 24, gap: 20,

@@ -10,66 +10,108 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import { useAppState } from '@/context/AppState';
+import type { AppTask } from '@/context/AppState';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { TaskDetailSheet } from '@/components/TaskDetailSheet';
+import { AssignedMemberAvatars } from '@/components/AssignedMemberAvatars';
+import { getAssignedMembers } from '@/utils/assignments';
 
 export default function TasksScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
-  const { tasks, members, toggleTask } = useAppState();
+  const { tasks, members, dashboardMembers, activeProfile, canManageFamily, toggleTask, deleteTask } = useAppState();
   const [showCompleted, setShowCompleted] = useState(false);
+  const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   const pending = tasks.filter(t => !t.done);
   const done = tasks.filter(t => t.done);
+  const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
+
+  function editSelectedTask(task: AppTask) {
+    if (!canManageFamily) return;
+    setSelectedTask(null);
+    router.push({
+      pathname: '/add-task',
+      params: { editTaskId: task.id },
+    });
+  }
+
+  function deleteSelectedTask(task: AppTask) {
+    if (!canManageFamily) return;
+    deleteTask(task.id);
+    setSelectedTask(null);
+  }
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
       <View style={[styles.header, { paddingTop: topPad + 12 }]}>
-        <View style={styles.headerLeft}>
-          <MemberAvatar member={members[0]} size={32} headerPhoto />
-        </View>
-        <Text style={[styles.headerTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
+        <Pressable
+          accessibilityLabel="Switch active profile"
+          onPress={() => {
+            Haptics.selectionAsync();
+            router.push('/profile-select');
+          }}
+          style={styles.headerLeft}
+        >
+          <MemberAvatar member={activeProfile ?? members[0]} size={32} headerPhoto={!activeProfile} />
+        </Pressable>
+        <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
           Tasks
         </Text>
         <Pressable style={styles.headerRight}>
-          <Feather name="bell" size={20} color={colors.foreground} />
+          <Feather name="bell" size={20} color={colors.primaryStrong} />
         </Pressable>
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.sectionHeader}>
           <Text style={[styles.sectionTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Today's Tasks</Text>
-          <Pressable
-            testID="add-task-button"
-            accessibilityLabel="Add task"
-            style={[styles.addBtn, { borderColor: colors.primary }]}
-            onPress={() => router.push('/add-task')}
-          >
-            <Feather name="plus" size={20} color={colors.primary} />
-          </Pressable>
+          {canManageFamily ? (
+            <Pressable
+              testID="add-task-button"
+              accessibilityLabel="Add task"
+              style={[styles.addBtn, { borderColor: colors.primary }]}
+              onPress={() => router.push('/add-task')}
+            >
+              <Feather name="plus" size={20} color={colors.primary} />
+            </Pressable>
+          ) : null}
         </View>
 
         <View style={styles.tasksList}>
           {pending.map(task => {
-            const person = members.find(m => m.id === task.personId);
+            const assignedMembers = getAssignedMembers(task, allMembers);
             return (
               <Pressable
                 key={task.id}
                 testID={`task-${task.id}`}
-                accessibilityLabel={`${task.done ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`}
-                style={[styles.taskCard, { backgroundColor: '#fff', shadowColor: colors.primary }]}
-                onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleTask(task.id); }}
+                accessibilityLabel={`View task details: ${task.title}`}
+                style={[styles.taskCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSelectedTask(task);
+                }}
               >
                 <View style={[styles.cardLeftBorder, { backgroundColor: task.color }]} />
-                <View style={[styles.checkbox, task.done && { backgroundColor: colors.primary, borderColor: colors.primary }]}>
+                <Pressable
+                  accessibilityLabel={`${task.done ? 'Mark incomplete' : 'Mark complete'}: ${task.title}`}
+                  disabled={!canManageFamily}
+                  onPress={() => {
+                    if (!canManageFamily) return;
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    toggleTask(task.id);
+                  }}
+                  style={[styles.checkbox, !canManageFamily && styles.disabledControl, task.done && { backgroundColor: colors.primary, borderColor: colors.primary }]}
+                >
                   {task.done && <Feather name="check" size={14} color="#fff" />}
-                </View>
+                </Pressable>
                 <View style={styles.taskContent}>
                   <Text style={[styles.taskTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold', textDecorationLine: task.done ? 'line-through' : 'none' }]}>
                     {task.title}
@@ -81,7 +123,7 @@ export default function TasksScreen() {
                     </Text>
                   </View>
                 </View>
-                {person && <MemberAvatar member={person} size={36} />}
+                <AssignedMemberAvatars members={assignedMembers} />
               </Pressable>
             );
           })}
@@ -101,19 +143,31 @@ export default function TasksScreen() {
         {showCompleted && (
           <View style={styles.tasksList}>
             {done.map(task => {
-              const person = members.find(m => m.id === task.personId);
-              return (
+            const assignedMembers = getAssignedMembers(task, allMembers);
+            return (
+              <Pressable
+                key={task.id}
+                testID={`completed-task-${task.id}`}
+                accessibilityLabel={`View task details: ${task.title}`}
+                style={[styles.taskCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setSelectedTask(task);
+                }}
+              >
+                <View style={[styles.cardLeftBorder, { backgroundColor: task.color }]} />
                 <Pressable
-                  key={task.id}
-                  testID={`completed-task-${task.id}`}
                   accessibilityLabel={`Mark incomplete: ${task.title}`}
-                  style={[styles.taskCard, { backgroundColor: '#fff', shadowColor: colors.primary }]}
-                  onPress={() => { Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light); toggleTask(task.id); }}
+                  disabled={!canManageFamily}
+                  onPress={() => {
+                    if (!canManageFamily) return;
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    toggleTask(task.id);
+                  }}
+                  style={[styles.checkbox, !canManageFamily && styles.disabledControl, { backgroundColor: colors.primary, borderColor: colors.primary }]}
                 >
-                  <View style={[styles.cardLeftBorder, { backgroundColor: task.color }]} />
-                  <View style={[styles.checkbox, { backgroundColor: colors.primary, borderColor: colors.primary }]}>
-                    <Feather name="check" size={14} color="#fff" />
-                  </View>
+                  <Feather name="check" size={14} color="#fff" />
+                </Pressable>
                   <View style={styles.taskContent}>
                     <Text style={[styles.taskTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold', textDecorationLine: 'line-through' }]}>
                       {task.title}
@@ -125,13 +179,23 @@ export default function TasksScreen() {
                       </Text>
                     </View>
                   </View>
-                  {person && <MemberAvatar member={person} size={36} />}
+                  <AssignedMemberAvatars members={assignedMembers} />
                 </Pressable>
               );
             })}
           </View>
         )}
       </ScrollView>
+
+      <TaskDetailSheet
+        task={selectedTask}
+        members={allMembers}
+        visible={selectedTask !== null}
+        canManage={canManageFamily}
+        onClose={() => setSelectedTask(null)}
+        onEdit={editSelectedTask}
+        onDelete={deleteSelectedTask}
+      />
     </View>
   );
 }
@@ -145,7 +209,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  sectionTitle: { fontSize: 24, letterSpacing: -0.6 },
+  sectionTitle: { fontSize: 24 },
   addBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
   tasksList: { gap: 16 },
   taskCard: {
@@ -154,7 +218,8 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   cardLeftBorder: { position: 'absolute', left: 0, top: 16, bottom: 16, width: 4, borderTopRightRadius: 4, borderBottomRightRadius: 4 },
-  checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 1.5, borderColor: '#e8e0f7', alignItems: 'center', justifyContent: 'center' },
+  checkbox: { width: 28, height: 28, borderRadius: 8, borderWidth: 1.5, borderColor: '#e1d8f2', alignItems: 'center', justifyContent: 'center' },
+  disabledControl: { opacity: 0.45 },
   taskContent: { flex: 1, gap: 6 },
   taskTitle: { fontSize: 16 },
   taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },

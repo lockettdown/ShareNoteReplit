@@ -13,11 +13,13 @@ import { Feather, Ionicons } from '@expo/vector-icons';
 import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
+import { useAppState } from '@/context/AppState';
 
 export default function SignInScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const { signInFamily } = useAppState();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -31,14 +33,15 @@ export default function SignInScreen() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       return;
     }
+    signInFamily(email);
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    router.replace('/(tabs)');
+    router.replace('/profile-select');
   }
 
   const inputContainerStyle = (field: string) => ({
     ...styles.inputContainer,
     borderColor: focusedField === field ? colors.primary : colors.border,
-    backgroundColor: '#fff',
+    backgroundColor: colors.card,
   });
 
   return (
@@ -65,7 +68,7 @@ export default function SignInScreen() {
           </Text>
         </View>
 
-        <View style={[styles.card, { backgroundColor: '#fff', shadowColor: colors.primary }]}>
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
           <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
               Email Address
@@ -153,12 +156,12 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24 },
   header: { alignItems: 'center', marginBottom: 32 },
   logoContainer: {
-    width: 72, height: 72, backgroundColor: '#fff',
+    width: 72, height: 72, backgroundColor: '#ffffff',
     borderRadius: 20, alignItems: 'center', justifyContent: 'center',
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4,
     marginBottom: 24,
   },
-  title: { fontSize: 32, letterSpacing: -0.8, textAlign: 'center', marginBottom: 8 },
+  title: { fontSize: 32, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, textAlign: 'center' },
   card: {
     borderRadius: 24, padding: 24, gap: 20,

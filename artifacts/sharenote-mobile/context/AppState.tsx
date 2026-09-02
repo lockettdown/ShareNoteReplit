@@ -1,4 +1,14 @@
 import React, { createContext, useContext, useState } from 'react';
+import {
+  clearStoredActiveProfileId,
+  clearStoredFamilyEmail,
+  getStoredActiveProfileId,
+  getStoredFamilyEmail,
+  normalizeFamilyEmail,
+  storeActiveProfileId,
+  storeFamilyEmail,
+} from '@/utils/deviceProfileStorage';
+import { profileCanManage } from '@/utils/profilePermissions';
 
 export type FamilyMember = {
   id: string;
@@ -14,24 +24,39 @@ export type AppEvent = {
   title: string;
   time: string;
   date: string;
+  endDate?: string;
+  repeat?: RepeatOption;
+  repeatEndsOn?: string;
+  repeatOccurrences?: number;
   personId: string;
+  personIds?: string[];
   color: string;
+  details?: string;
 };
+
+export type RepeatOption = 'None' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
 
 export type AppTask = {
   id: string;
   title: string;
   time: string;
   date: string;
+  endDate?: string;
+  repeat?: RepeatOption;
+  repeatEndsOn?: string;
+  repeatOccurrences?: number;
   location: string;
   personId: string;
+  personIds?: string[];
   done: boolean;
   color: string;
+  details?: string;
 };
 
 export type GroceryItem = {
   id: string;
   name: string;
+  details?: string;
   category: string;
   checked: boolean;
   personId?: string;
@@ -39,7 +64,11 @@ export type GroceryItem = {
 };
 
 type AppStateContextType = {
+  familyEmail: string;
   familyName: string;
+  activeProfileId: string | null;
+  activeProfile: FamilyMember | null;
+  canManageFamily: boolean;
   members: FamilyMember[];
   dashboardMembers: FamilyMember[];
   events: AppEvent[];
@@ -49,9 +78,20 @@ type AppStateContextType = {
   groceries: GroceryItem[];
   setFamilyName: (familyName: string) => void;
   setMembers: (members: FamilyMember[]) => void;
-  createFamily: (familyName: string, yourName: string) => void;
+  signInFamily: (familyEmail: string) => void;
+  signOut: () => void;
+  selectActiveProfile: (profileId: string) => void;
+  clearActiveProfile: () => void;
+  addMember: (member: Omit<FamilyMember, 'id'>) => void;
+  updateMember: (id: string, member: Omit<FamilyMember, 'id'>) => void;
+  deleteMember: (id: string) => void;
+  createFamily: (familyName: string, yourName: string, familyEmail: string) => void;
   addEvent: (event: Omit<AppEvent, 'id'>) => void;
+  updateEvent: (id: string, event: Omit<AppEvent, 'id'>) => void;
+  deleteEvent: (id: string) => void;
   addTask: (task: Omit<AppTask, 'id' | 'done'>) => void;
+  updateTask: (id: string, task: Omit<AppTask, 'id'>) => void;
+  deleteTask: (id: string) => void;
   toggleTask: (id: string) => void;
   addGroceryItem: (item: Omit<GroceryItem, 'id' | 'checked'>) => void;
   toggleGroceryItem: (id: string) => void;
@@ -61,37 +101,37 @@ type AppStateContextType = {
 const AppStateContext = createContext<AppStateContextType | null>(null);
 
 const INITIAL_MEMBERS: FamilyMember[] = [
-  { id: 'm1', name: 'David Smith', nickname: 'Dad', role: 'Parent', initials: 'DS', color: '#4f46e5' },
-  { id: 'm2', name: 'Maya Smith', nickname: 'Mom', role: 'Parent', initials: 'MS', color: '#e11d48' },
-  { id: 'm3', name: 'Leo Smith', nickname: 'Jake', role: 'Child', initials: 'LS', color: '#059669' },
+  { id: 'm1', name: 'David Smith', nickname: 'Dad', role: 'Parent', initials: 'DS', color: '#9b5cf6' },
+  { id: 'm2', name: 'Maya Smith', nickname: 'Mom', role: 'Parent', initials: 'MS', color: '#f6a53a' },
+  { id: 'm3', name: 'Leo Smith', nickname: 'Jake', role: 'Child', initials: 'LS', color: '#12c7a0' },
 ];
 
 const INITIAL_DASHBOARD_MEMBERS: FamilyMember[] = [
   ...INITIAL_MEMBERS,
-  { id: 'm4', name: 'Lily Smith', nickname: 'Lily', role: 'Child', initials: 'LY', color: '#d946ef' },
+  { id: 'm4', name: 'Lily Smith', nickname: 'Lily', role: 'Child', initials: 'LY', color: '#f04e9b' },
 ];
 
 const INITIAL_EVENTS: AppEvent[] = [
-  { id: 'e1', title: 'Dentist Appointment', time: '10:00 AM', date: '2025-08-12', personId: 'm2', color: '#3b82f6' },
-  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#0d9488' },
-  { id: 'e3', title: 'Family Dinner', time: '7:00 PM', date: '2025-08-12', personId: 'm1', color: '#8b5cf6' },
+  { id: 'e1', title: 'Dentist Appointment', time: '10:00 AM', date: '2025-08-12', personId: 'm2', color: '#5bb6ff' },
+  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#12c7a0' },
+  { id: 'e3', title: 'Family Dinner', time: '7:00 PM', date: '2025-08-12', personId: 'm1', color: '#9b5cf6' },
 ];
 
 const INITIAL_DASHBOARD_EVENTS: AppEvent[] = [
-  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#0d9488' },
-  { id: 'e4', title: 'Piano Lesson', time: '6:00 PM - 7:00 PM', date: '2025-08-12', personId: 'm4', color: '#e11d48' },
+  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#12c7a0' },
+  { id: 'e4', title: 'Piano Lesson', time: '6:00 PM - 7:00 PM', date: '2025-08-12', personId: 'm4', color: '#f04e9b' },
 ];
 
 const INITIAL_TASKS: AppTask[] = [
-  { id: 't1', title: 'Take out garbage', time: '8:00 AM', date: '2025-08-12', location: 'Home', personId: 'm1', done: false, color: '#3b82f6' },
-  { id: 't2', title: 'Finish homework', time: '4:00 PM', date: '2025-08-12', location: 'School', personId: 'm3', done: false, color: '#059669' },
-  { id: 't3', title: 'Grocery shopping', time: '5:00 PM', date: '2025-08-12', location: 'Personal', personId: 'm2', done: false, color: '#8b5cf6' },
+  { id: 't1', title: 'Take out garbage', time: '8:00 AM', date: '2025-08-12', location: 'Home', personId: 'm1', done: false, color: '#9b5cf6' },
+  { id: 't2', title: 'Finish homework', time: '4:00 PM', date: '2025-08-12', location: 'School', personId: 'm3', done: false, color: '#12c7a0' },
+  { id: 't3', title: 'Grocery shopping', time: '5:00 PM', date: '2025-08-12', location: 'Personal', personId: 'm2', done: false, color: '#f6a53a' },
 ];
 
 const INITIAL_PROFILE_TASKS: AppTask[] = [
-  { id: 't4', title: 'Buy Groceries', time: '', date: '2025-08-12', location: 'Weekly Shop', personId: 'm1', done: false, color: '#8b5cf6' },
-  { id: 't5', title: 'Fix the sink', time: '', date: '2025-08-12', location: 'Kitchen', personId: 'm1', done: false, color: '#8b5cf6' },
-  { id: 't6', title: 'Pay bills', time: '', date: '2025-08-12', location: 'Due Today', personId: 'm1', done: false, color: '#3b82f6' },
+  { id: 't4', title: 'Buy Groceries', time: '', date: '2025-08-12', location: 'Weekly Shop', personId: 'm1', done: false, color: '#9b5cf6' },
+  { id: 't5', title: 'Fix the sink', time: '', date: '2025-08-12', location: 'Kitchen', personId: 'm1', done: false, color: '#12c7a0' },
+  { id: 't6', title: 'Pay bills', time: '', date: '2025-08-12', location: 'Due Today', personId: 'm1', done: false, color: '#5bb6ff' },
 ];
 
 const INITIAL_GROCERIES: GroceryItem[] = [
@@ -105,6 +145,8 @@ const INITIAL_GROCERIES: GroceryItem[] = [
 ];
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
+  const storedFamilyEmail = getStoredFamilyEmail();
+  const [familyEmail, setFamilyEmail] = useState(storedFamilyEmail);
   const [familyName, setFamilyName] = useState('Smith Family');
   const [members, setMembers] = useState<FamilyMember[]>(INITIAL_MEMBERS);
   const [dashboardMembers, setDashboardMembers] = useState<FamilyMember[]>(INITIAL_DASHBOARD_MEMBERS);
@@ -113,11 +155,49 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [tasks, setTasks] = useState<AppTask[]>(INITIAL_TASKS);
   const [profileTasks, setProfileTasks] = useState<AppTask[]>(INITIAL_PROFILE_TASKS);
   const [groceries, setGroceries] = useState<GroceryItem[]>(INITIAL_GROCERIES);
+  const [activeProfileId, setActiveProfileId] = useState<string | null>(
+    getStoredActiveProfileId(storedFamilyEmail),
+  );
 
-  function createFamily(submittedFamilyName: string, submittedYourName: string) {
+  const allMembers = [
+    ...members,
+    ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id)),
+  ];
+  const activeProfile = allMembers.find((member) => member.id === activeProfileId) ?? null;
+  const canManageFamily = profileCanManage(activeProfile);
+
+  function signInFamily(submittedFamilyEmail: string) {
+    const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
+    if (!normalizedFamilyEmail) return;
+    const storedProfileId = getStoredActiveProfileId(normalizedFamilyEmail);
+
+    setFamilyEmail(normalizedFamilyEmail);
+    setActiveProfileId(storedProfileId);
+    storeFamilyEmail(normalizedFamilyEmail);
+  }
+
+  function signOut() {
+    clearStoredActiveProfileId(familyEmail);
+    setFamilyEmail('');
+    setActiveProfileId(null);
+    clearStoredFamilyEmail();
+  }
+
+  function selectActiveProfile(profileId: string) {
+    setActiveProfileId(profileId);
+    storeActiveProfileId(familyEmail, profileId);
+  }
+
+  function clearActiveProfile() {
+    setActiveProfileId(null);
+    clearStoredActiveProfileId(familyEmail);
+  }
+
+  function createFamily(submittedFamilyName: string, submittedYourName: string, submittedFamilyEmail: string) {
     const normalizedFamilyName = submittedFamilyName.trim();
     const normalizedYourName = submittedYourName.trim();
-    if (!normalizedFamilyName || !normalizedYourName) return;
+    const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
+    if (!normalizedFamilyName || !normalizedYourName || !normalizedFamilyEmail) return;
 
     const nameParts = normalizedYourName.split(/\s+/).filter(Boolean);
     const initials = nameParts.map((part) => part[0]).join('').slice(0, 2).toUpperCase() || 'ME';
@@ -127,10 +207,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       nickname: nameParts[0] ?? normalizedYourName,
       role: 'Parent',
       initials,
-      color: '#4f46e5',
+      color: '#9b5cf6',
     };
 
     setFamilyName(normalizedFamilyName);
+    setFamilyEmail(normalizedFamilyEmail);
     setMembers([creator]);
     setDashboardMembers([creator]);
     setEvents([]);
@@ -138,6 +219,47 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setTasks([]);
     setProfileTasks([]);
     setGroceries([]);
+    setActiveProfileId(null);
+    storeFamilyEmail(normalizedFamilyEmail);
+    clearStoredActiveProfileId(normalizedFamilyEmail);
+  }
+
+  function addMember(member: Omit<FamilyMember, 'id'>) {
+    const newMember = { ...member, id: `member-${Date.now()}` };
+    setMembers((prev) => [...prev, newMember]);
+    setDashboardMembers((prev) => [...prev, newMember]);
+  }
+
+  function updateMember(id: string, member: Omit<FamilyMember, 'id'>) {
+    const nextMember = { ...member, id };
+    setMembers((prev) => prev.map((item) => (item.id === id ? nextMember : item)));
+    setDashboardMembers((prev) => prev.map((item) => (item.id === id ? nextMember : item)));
+    setEvents((prev) => prev.map((item) => (item.personId === id ? { ...item, color: member.color } : item)));
+    setDashboardEvents((prev) => prev.map((item) => (item.personId === id ? { ...item, color: member.color } : item)));
+    setTasks((prev) => prev.map((item) => (item.personId === id ? { ...item, color: member.color } : item)));
+    setProfileTasks((prev) => prev.map((item) => (item.personId === id ? { ...item, color: member.color } : item)));
+  }
+
+  function deleteMember(id: string) {
+    const removeDeletedEventAssignment = (item: AppEvent): AppEvent | null => {
+      const remainingPersonIds = (item.personIds ?? [item.personId]).filter((personId) => personId !== id);
+      if (remainingPersonIds.length === 0) return null;
+      return { ...item, personId: remainingPersonIds[0], personIds: remainingPersonIds };
+    };
+    const removeDeletedTaskAssignment = (item: AppTask): AppTask | null => {
+      const remainingPersonIds = (item.personIds ?? [item.personId]).filter((personId) => personId !== id);
+      if (remainingPersonIds.length === 0) return null;
+      return { ...item, personId: remainingPersonIds[0], personIds: remainingPersonIds };
+    };
+
+    setMembers((prev) => prev.filter((item) => item.id !== id));
+    setDashboardMembers((prev) => prev.filter((item) => item.id !== id));
+    setEvents((prev) => prev.map(removeDeletedEventAssignment).filter((item): item is AppEvent => Boolean(item)));
+    setDashboardEvents((prev) => prev.map(removeDeletedEventAssignment).filter((item): item is AppEvent => Boolean(item)));
+    setTasks((prev) => prev.map(removeDeletedTaskAssignment).filter((item): item is AppTask => Boolean(item)));
+    setProfileTasks((prev) => prev.map(removeDeletedTaskAssignment).filter((item): item is AppTask => Boolean(item)));
+    setGroceries((prev) => prev.filter((item) => item.personId !== id));
+    if (activeProfileId === id) clearActiveProfile();
   }
 
   function addEvent(event: Omit<AppEvent, 'id'>) {
@@ -146,10 +268,30 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setDashboardEvents((prev) => [...prev, newEvent]);
   }
 
+  function updateEvent(id: string, event: Omit<AppEvent, 'id'>) {
+    setEvents((prev) => prev.map((item) => (item.id === id ? { ...event, id } : item)));
+    setDashboardEvents((prev) => prev.map((item) => (item.id === id ? { ...event, id } : item)));
+  }
+
+  function deleteEvent(id: string) {
+    setEvents((prev) => prev.filter((item) => item.id !== id));
+    setDashboardEvents((prev) => prev.filter((item) => item.id !== id));
+  }
+
   function addTask(task: Omit<AppTask, 'id' | 'done'>) {
     const newTask = { ...task, id: `task-${Date.now()}`, done: false };
     setTasks((prev) => [...prev, newTask]);
     setProfileTasks((prev) => [...prev, newTask]);
+  }
+
+  function updateTask(id: string, task: Omit<AppTask, 'id'>) {
+    setTasks((prev) => prev.map((item) => (item.id === id ? { ...task, id } : item)));
+    setProfileTasks((prev) => prev.map((item) => (item.id === id ? { ...task, id } : item)));
+  }
+
+  function deleteTask(id: string) {
+    setTasks((prev) => prev.filter((item) => item.id !== id));
+    setProfileTasks((prev) => prev.filter((item) => item.id !== id));
   }
 
   function toggleTask(id: string) {
@@ -172,8 +314,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   return (
     <AppStateContext.Provider
       value={{
-        familyName, members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
-        setFamilyName, setMembers, createFamily, addEvent, addTask, toggleTask,
+        familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
+        members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
+        setFamilyName, setMembers, signInFamily, signOut, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
         addGroceryItem, toggleGroceryItem, removeGroceryItem,
       }}
     >

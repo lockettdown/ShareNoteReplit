@@ -22,13 +22,13 @@ type MemberAvatarProps = {
 export function MemberAvatar({
   member,
   size = 32,
-  borderColor = '#fff',
+  borderColor = '#ffffff',
   borderWidth = 2,
   headerPhoto = false,
   selected = false,
 }: MemberAvatarProps) {
   const photo = headerPhoto ? HEADER_PHOTO : MEMBER_PHOTOS[member.id];
-  const resolvedBorderColor = selected ? '#935bf0' : borderColor;
+  const resolvedBorderColor = selected ? '#9b5cf6' : borderColor;
   const resolvedBorderWidth = selected ? 2 : borderWidth;
 
   return (
@@ -75,7 +75,7 @@ const styles = StyleSheet.create({
     width: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#935bf0',
+    backgroundColor: '#9b5cf6',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
