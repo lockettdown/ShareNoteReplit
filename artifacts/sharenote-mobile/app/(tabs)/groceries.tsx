@@ -1,4 +1,7 @@
 import {
+  InputAccessoryView,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   Pressable,
@@ -29,6 +32,8 @@ const GROCERY_CATEGORIES = [
   'Pantry',
   'Other',
 ];
+
+const GROCERY_INPUT_ACCESSORY_ID = 'grocery-input-accessory';
 
 export default function GroceriesScreen() {
   const insets = useSafeAreaInsets();
@@ -67,6 +72,7 @@ export default function GroceriesScreen() {
 
   function handleCloseAddItemCard() {
     setShowAddItemCard(false);
+    setShowCategoryPicker(false);
     setNewItemName('');
     setNewItemDetails('');
     setNewItemCategory('Other');
@@ -261,132 +267,146 @@ export default function GroceriesScreen() {
       </View>
 
       <Modal visible={showAddItemCard} transparent animationType="fade" onRequestClose={handleCloseAddItemCard}>
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={handleCloseAddItemCard}
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          style={styles.keyboardAvoiding}
         >
           <Pressable
-            style={[styles.addItemSheet, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
-            onPress={() => null}
+            style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+            onPress={Keyboard.dismiss}
           >
-            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
-            <View style={styles.sheetHeader}>
-              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
-                Add Grocery Item
-              </Text>
-              <Pressable accessibilityLabel="Close add item" style={styles.sheetCloseButton} onPress={handleCloseAddItemCard}>
-                <Feather name="x" size={22} color={colors.foreground} />
+            <Pressable
+              style={[styles.addItemSheet, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
+              onPress={(event) => event.stopPropagation()}
+            >
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={styles.addItemSheetContent}
+              >
+                <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
+                <View style={styles.sheetHeader}>
+                  <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
+                    Add Grocery Item
+                  </Text>
+                  <Pressable accessibilityLabel="Close add item" style={styles.sheetCloseButton} onPress={handleCloseAddItemCard}>
+                    <Feather name="x" size={22} color={colors.foreground} />
+                  </Pressable>
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                    Item
+                  </Text>
+                  <TextInput
+                    style={[styles.formInput, { borderColor: colors.border, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+                    placeholder="Item name"
+                    placeholderTextColor={colors.mutedForeground}
+                    accessibilityLabel="Grocery item name"
+                    value={newItemName}
+                    onChangeText={setNewItemName}
+                    returnKeyType="next"
+                    inputAccessoryViewID={GROCERY_INPUT_ACCESSORY_ID}
+                  />
+                </View>
+
+                <View style={styles.formGroup}>
+                  <Text style={[styles.inputLabel, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                    Details
+                  </Text>
+                  <TextInput
+                    style={[styles.formInput, styles.detailsInput, { borderColor: colors.border, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
+                    placeholder="Notes, brand, quantity, size..."
+                    placeholderTextColor={colors.mutedForeground}
+                    accessibilityLabel="Grocery item details"
+                    value={newItemDetails}
+                    onChangeText={setNewItemDetails}
+                    multiline
+                    blurOnSubmit
+                    returnKeyType="done"
+                    inputAccessoryViewID={GROCERY_INPUT_ACCESSORY_ID}
+                    textAlignVertical="top"
+                  />
+                </View>
+
+                <Pressable
+                  accessibilityLabel="Choose grocery category"
+                  accessibilityState={{ expanded: showCategoryPicker }}
+                  onPress={() => {
+                    Keyboard.dismiss();
+                    Haptics.selectionAsync();
+                    setShowCategoryPicker((visible) => !visible);
+                  }}
+                  style={[styles.categorySelect, { backgroundColor: colors.secondary }]}
+                >
+                  <Feather name={getCategoryIcon(newItemCategory)} size={16} color={colors.primaryStrong} />
+                  <Text style={[styles.categorySelectText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
+                    {newItemCategory}
+                  </Text>
+                  <Feather name={showCategoryPicker ? 'chevron-up' : 'chevron-down'} size={16} color={colors.primaryStrong} />
+                </Pressable>
+
+                {showCategoryPicker ? (
+                  <View style={styles.categoryGrid}>
+                    {GROCERY_CATEGORIES.map((category) => {
+                      const selected = category === newItemCategory;
+                      return (
+                        <Pressable
+                          key={category}
+                          accessibilityLabel={`Select ${category}`}
+                          accessibilityState={{ selected }}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setNewItemCategory(category);
+                            setShowCategoryPicker(false);
+                          }}
+                          style={[
+                            styles.categoryOption,
+                            { backgroundColor: selected ? colors.primary : colors.cardSoft, borderColor: selected ? colors.primary : colors.border },
+                          ]}
+                        >
+                          <Feather name={getCategoryIcon(category)} size={16} color={selected ? '#ffffff' : colors.primaryStrong} />
+                          <Text
+                            style={[
+                              styles.categoryOptionText,
+                              {
+                                color: selected ? '#ffffff' : colors.foreground,
+                                fontFamily: selected ? 'Inter_600SemiBold' : 'Inter_500Medium',
+                              },
+                            ]}
+                          >
+                            {category}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                ) : null}
+
+                <Pressable
+                  accessibilityLabel="Save grocery item"
+                  style={[styles.saveItemButton, { backgroundColor: newItemName.trim() ? colors.primary : colors.border }]}
+                  onPress={handleAddItem}
+                >
+                  <Text style={[styles.saveItemText, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]}>
+                    Add Item
+                  </Text>
+                </Pressable>
+              </ScrollView>
+            </Pressable>
+          </Pressable>
+        </KeyboardAvoidingView>
+        {Platform.OS === 'ios' ? (
+          <InputAccessoryView nativeID={GROCERY_INPUT_ACCESSORY_ID}>
+            <View style={[styles.keyboardAccessory, { backgroundColor: colors.card, borderTopColor: colors.border }]}>
+              <Pressable accessibilityLabel="Close keyboard" style={styles.keyboardDoneButton} onPress={Keyboard.dismiss}>
+                <Text style={[styles.keyboardDoneText, { color: colors.primaryStrong, fontFamily: 'Inter_700Bold' }]}>
+                  Done
+                </Text>
               </Pressable>
             </View>
-
-            <View style={styles.formGroup}>
-              <Text style={[styles.inputLabel, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-                Item
-              </Text>
-              <TextInput
-                style={[styles.formInput, { borderColor: colors.border, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
-                placeholder="Item name"
-                placeholderTextColor={colors.mutedForeground}
-                accessibilityLabel="Grocery item name"
-                value={newItemName}
-                onChangeText={setNewItemName}
-                returnKeyType="next"
-              />
-            </View>
-
-            <View style={styles.formGroup}>
-              <Text style={[styles.inputLabel, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-                Details
-              </Text>
-              <TextInput
-                style={[styles.formInput, styles.detailsInput, { borderColor: colors.border, color: colors.foreground, fontFamily: 'Inter_400Regular' }]}
-                placeholder="Notes, brand, quantity, size..."
-                placeholderTextColor={colors.mutedForeground}
-                accessibilityLabel="Grocery item details"
-                value={newItemDetails}
-                onChangeText={setNewItemDetails}
-                multiline
-                textAlignVertical="top"
-              />
-            </View>
-
-            <Pressable
-              accessibilityLabel="Choose grocery category"
-              onPress={() => {
-                Haptics.selectionAsync();
-                setShowCategoryPicker(true);
-              }}
-              style={[styles.categorySelect, { backgroundColor: colors.secondary }]}
-            >
-              <Feather name={getCategoryIcon(newItemCategory)} size={16} color={colors.primaryStrong} />
-              <Text style={[styles.categorySelectText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
-                {newItemCategory}
-              </Text>
-              <Feather name="chevron-up" size={16} color={colors.primaryStrong} />
-            </Pressable>
-
-            <Pressable
-              accessibilityLabel="Save grocery item"
-              style={[styles.saveItemButton, { backgroundColor: newItemName.trim() ? colors.primary : colors.border }]}
-              onPress={handleAddItem}
-            >
-              <Text style={[styles.saveItemText, { color: '#ffffff', fontFamily: 'Inter_700Bold' }]}>
-                Add Item
-              </Text>
-            </Pressable>
-          </Pressable>
-        </Pressable>
-      </Modal>
-
-      <Modal visible={showCategoryPicker} transparent animationType="fade" onRequestClose={() => setShowCategoryPicker(false)}>
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => setShowCategoryPicker(false)}
-        >
-          <Pressable
-            style={[styles.categorySheet, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
-            onPress={() => null}
-          >
-            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
-            <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
-              Category
-            </Text>
-            <View style={styles.categoryGrid}>
-              {GROCERY_CATEGORIES.map((category) => {
-                const selected = category === newItemCategory;
-                return (
-                  <Pressable
-                    key={category}
-                    accessibilityLabel={`Select ${category}`}
-                    accessibilityState={{ selected }}
-                    onPress={() => {
-                      Haptics.selectionAsync();
-                      setNewItemCategory(category);
-                      setShowCategoryPicker(false);
-                    }}
-                    style={[
-                      styles.categoryOption,
-                      { backgroundColor: selected ? colors.primary : colors.cardSoft, borderColor: selected ? colors.primary : colors.border },
-                    ]}
-                  >
-                    <Feather name={getCategoryIcon(category)} size={16} color={selected ? '#ffffff' : colors.primaryStrong} />
-                    <Text
-                      style={[
-                        styles.categoryOptionText,
-                        {
-                          color: selected ? '#ffffff' : colors.foreground,
-                          fontFamily: selected ? 'Inter_600SemiBold' : 'Inter_500Medium',
-                        },
-                      ]}
-                    >
-                      {category}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-          </Pressable>
-        </Pressable>
+          </InputAccessoryView>
+        ) : null}
       </Modal>
 
       <Modal visible={Boolean(selectedGrocery)} transparent animationType="fade" onRequestClose={() => setSelectedGrocery(null)}>
@@ -464,8 +484,10 @@ const styles = StyleSheet.create({
   addPillText: { flex: 1, fontSize: 16 },
   categorySelect: { height: 40, borderRadius: 14, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   categorySelectText: { fontSize: 14 },
+  keyboardAvoiding: { flex: 1 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end', padding: 16 },
-  addItemSheet: { borderRadius: 24, padding: 20, gap: 16, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 8 },
+  addItemSheet: { borderRadius: 24, maxHeight: '92%', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 8 },
+  addItemSheetContent: { padding: 20, gap: 16 },
   categorySheet: { borderRadius: 24, padding: 20, gap: 16, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 8 },
   modalDragHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center' },
   sheetHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
@@ -480,6 +502,9 @@ const styles = StyleSheet.create({
   categoryGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   categoryOption: { minHeight: 48, borderRadius: 16, borderWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 14 },
   categoryOptionText: { fontSize: 14 },
+  keyboardAccessory: { minHeight: 44, borderTopWidth: 1, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 16 },
+  keyboardDoneButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 8 },
+  keyboardDoneText: { fontSize: 16 },
   detailSheet: { borderRadius: 28, padding: 24, gap: 16, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 8 },
   detailIcon: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
   detailCategory: { fontSize: 13, textTransform: 'uppercase' },
