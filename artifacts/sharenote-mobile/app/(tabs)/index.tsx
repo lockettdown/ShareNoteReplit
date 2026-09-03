@@ -67,7 +67,7 @@ export default function DashboardScreen() {
     setSelectedEvent(null);
     router.push({
       pathname: '/add-event',
-      params: { editEventId: event.id },
+      params: { editEventId: event.id, occurrenceDate: selectedDate },
     });
   }
 

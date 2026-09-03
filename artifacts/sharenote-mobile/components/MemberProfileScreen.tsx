@@ -85,7 +85,7 @@ export default function MemberProfileScreen() {
     setSelectedEvent(null);
     router.push({
       pathname: '/add-event',
-      params: { editEventId: event.id },
+      params: { editEventId: event.id, occurrenceDate: event.date },
     });
   }
 

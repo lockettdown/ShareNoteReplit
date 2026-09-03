@@ -11,6 +11,7 @@ import {
   storeFamilyEmail,
 } from '@/utils/deviceProfileStorage';
 import { profileCanManage } from '@/utils/profilePermissions';
+import { parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
 export type FamilyMember = {
   id: string;
@@ -99,6 +100,7 @@ type AppStateContextType = {
   ) => Promise<AuthActionResult>;
   addEvent: (event: Omit<AppEvent, 'id'>) => void;
   updateEvent: (id: string, event: Omit<AppEvent, 'id'>) => void;
+  updateRecurringEventOccurrence: (id: string, occurrenceDate: string, event: Omit<AppEvent, 'id'>) => void;
   deleteEvent: (id: string) => void;
   addTask: (task: Omit<AppTask, 'id' | 'done'>) => void;
   updateTask: (id: string, task: Omit<AppTask, 'id'>) => void;
@@ -243,6 +245,123 @@ function createInitialFamilyStateForUser(user: User): PersistedAppState {
     : fallbackName;
 
   return createInitialFamilyState(familyName, yourName);
+}
+
+function daysBetween(start: Date, end: Date) {
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.round((endUtc - startUtc) / 86400000);
+}
+
+function addDays(value: string, days: number) {
+  const date = parseCanonicalDate(value);
+  date.setDate(date.getDate() + days);
+  return toCanonicalDate(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addMonthsClamped(value: string, months: number) {
+  const date = parseCanonicalDate(value);
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth() + months;
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const clampedDate = new Date(targetYear, targetMonth, Math.min(date.getDate(), daysInTargetMonth));
+  return toCanonicalDate(clampedDate.getFullYear(), clampedDate.getMonth(), clampedDate.getDate());
+}
+
+function addYearsClamped(value: string, years: number) {
+  const date = parseCanonicalDate(value);
+  const targetYear = date.getFullYear() + years;
+  const daysInTargetMonth = new Date(targetYear, date.getMonth() + 1, 0).getDate();
+  const clampedDate = new Date(targetYear, date.getMonth(), Math.min(date.getDate(), daysInTargetMonth));
+  return toCanonicalDate(clampedDate.getFullYear(), clampedDate.getMonth(), clampedDate.getDate());
+}
+
+function getOccurrenceStart(event: AppEvent, index: number) {
+  const repeat = event.repeat ?? 'None';
+  if (repeat === 'Daily') return addDays(event.date, index);
+  if (repeat === 'Weekly') return addDays(event.date, index * 7);
+  if (repeat === 'Monthly') return addMonthsClamped(event.date, index);
+  if (repeat === 'Yearly') return addYearsClamped(event.date, index);
+  return event.date;
+}
+
+function occurrenceIsAvailable(event: AppEvent, occurrenceStart: string, index: number) {
+  if (event.repeatOccurrences && index >= event.repeatOccurrences) return false;
+  if (event.repeatEndsOn && daysBetween(parseCanonicalDate(event.repeatEndsOn), parseCanonicalDate(occurrenceStart)) > 0) return false;
+  return true;
+}
+
+function getOccurrenceInfo(event: AppEvent, selectedDate: string) {
+  const repeat = event.repeat ?? 'None';
+  const durationDays = Math.max(0, daysBetween(parseCanonicalDate(event.date), parseCanonicalDate(event.endDate || event.date)));
+  const selected = parseCanonicalDate(selectedDate);
+  let index = 0;
+
+  while (index < 10000) {
+    const occurrenceStart = getOccurrenceStart(event, index);
+    if (!occurrenceIsAvailable(event, occurrenceStart, index)) return null;
+
+    const start = parseCanonicalDate(occurrenceStart);
+    const end = parseCanonicalDate(addDays(occurrenceStart, durationDays));
+    if (daysBetween(start, selected) >= 0 && daysBetween(selected, end) >= 0) {
+      return { index, occurrenceStart, durationDays };
+    }
+    if (daysBetween(selected, start) > 0 || repeat === 'None') return null;
+    index += 1;
+  }
+
+  return null;
+}
+
+function moveEventDuration(event: AppEvent, startDate: string, durationDays: number): AppEvent {
+  return {
+    ...event,
+    date: startDate,
+    endDate: durationDays > 0 ? addDays(startDate, durationDays) : undefined,
+  };
+}
+
+function createOneTimeEvent(event: Omit<AppEvent, 'id'>, id: string): AppEvent {
+  return {
+    ...event,
+    id,
+    repeat: 'None',
+    repeatEndsOn: undefined,
+    repeatOccurrences: undefined,
+  };
+}
+
+function buildOccurrenceUpdateEvents(original: AppEvent, occurrenceDate: string, event: Omit<AppEvent, 'id'>, timestamp: number): AppEvent[] {
+  const info = getOccurrenceInfo(original, occurrenceDate) ?? {
+    index: 0,
+    occurrenceStart: original.date,
+    durationDays: Math.max(0, daysBetween(parseCanonicalDate(original.date), parseCanonicalDate(original.endDate || original.date))),
+  };
+  const replacement = createOneTimeEvent(event, `${original.id}-occurrence-${timestamp}`);
+  const nextEvents: AppEvent[] = [];
+
+  if (info.index > 0) {
+    const previousOccurrenceStart = getOccurrenceStart(original, info.index - 1);
+    nextEvents.push({
+      ...original,
+      repeatEndsOn: previousOccurrenceStart,
+      repeatOccurrences: original.repeatOccurrences ? info.index : undefined,
+    });
+  }
+
+  nextEvents.push(replacement);
+
+  const nextOccurrenceIndex = info.index + 1;
+  const nextOccurrenceStart = getOccurrenceStart(original, nextOccurrenceIndex);
+  if (occurrenceIsAvailable(original, nextOccurrenceStart, nextOccurrenceIndex)) {
+    nextEvents.push({
+      ...moveEventDuration(original, nextOccurrenceStart, info.durationDays),
+      id: `${original.id}-series-${timestamp}`,
+      repeatOccurrences: original.repeatOccurrences ? original.repeatOccurrences - nextOccurrenceIndex : undefined,
+    });
+  }
+
+  return nextEvents;
 }
 
 async function loadFamilyState(userId: string) {
@@ -622,6 +741,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setDashboardEvents((prev) => prev.map((item) => (item.id === id ? { ...event, id } : item)));
   }
 
+  function updateRecurringEventOccurrence(id: string, occurrenceDate: string, event: Omit<AppEvent, 'id'>) {
+    const timestamp = Date.now();
+    const updateCollection = (items: AppEvent[]) => {
+      const original = items.find((item) => item.id === id);
+      if (!original) return items;
+      const replacementEvents = buildOccurrenceUpdateEvents(original, occurrenceDate, event, timestamp);
+      return items.flatMap((item) => (item.id === id ? replacementEvents : [item]));
+    };
+
+    setEvents(updateCollection);
+    setDashboardEvents(updateCollection);
+  }
+
   function deleteEvent(id: string) {
     setEvents((prev) => prev.filter((item) => item.id !== id));
     setDashboardEvents((prev) => prev.filter((item) => item.id !== id));
@@ -666,7 +798,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         authUser, isAuthLoading, isFamilyStateLoading: Boolean(familyEmail && isSupabaseConfigured && !hasLoadedRemoteState),
         familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
         members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
-        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
+        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, updateRecurringEventOccurrence, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
         addGroceryItem, toggleGroceryItem, removeGroceryItem,
       }}
     >
