@@ -7,12 +7,6 @@
     "icon": "./assets/images/icon.png",
     "scheme": "sharenote-mobile",
     "userInterfaceStyle": "light",
-    "newArchEnabled": true,
-    "splash": {
-      "image": "./assets/images/icon.png",
-      "resizeMode": "contain",
-      "backgroundColor": "#f4efff"
-    },
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "com.sharenote.app"
