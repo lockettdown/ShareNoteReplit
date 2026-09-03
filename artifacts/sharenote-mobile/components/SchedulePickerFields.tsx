@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+import { getTodayCanonicalDate } from '@/utils/schedule';
 
 type SchedulePickerFieldsProps = {
   date: string;
@@ -46,7 +47,10 @@ type DateTarget = 'date' | 'endDate';
 
 function parseDisplayDate(value: string) {
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return new Date(2025, 7, 12);
+  if (!match) {
+    const [year, month, day] = getTodayCanonicalDate().split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
   return new Date(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
 }
 
@@ -62,7 +66,7 @@ function parseTime(value: string) {
 
 export function normalizePickedDate(value: string) {
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return value.trim() || '2025-08-12';
+  if (!match) return value.trim() || getTodayCanonicalDate();
   return `${match[3]}-${match[1]}-${match[2]}`;
 }
 

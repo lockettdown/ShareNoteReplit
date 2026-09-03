@@ -8,6 +8,8 @@ import { MemberAvatar } from '@/components/MemberAvatar';
 import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { ProfileRolePicker } from '@/components/ProfileRolePicker';
+import { isAssignedToPerson } from '@/utils/assignments';
+import { getTodayCanonicalDate, itemOccursOn } from '@/utils/schedule';
 
 const MEMBER_COLORS = ['#9b5cf6', '#f6a53a', '#12c7a0', '#f04e9b', '#5bb6ff', '#ef4444', '#22c55e', '#6366f1'];
 
@@ -22,17 +24,31 @@ function initialsFromName(name: string) {
   return initials || 'ME';
 }
 
+function taskSummary(count: number) {
+  if (count === 0) return 'No tasks due today';
+  if (count === 1) return '1 task due today';
+  return `${count} tasks due today`;
+}
+
+function eventSummary(title?: string, time?: string) {
+  if (!title) return 'No events today';
+  if (!time || time === 'No time set') return title;
+  return `${title} at ${time.split(' - ')[0]}`;
+}
+
 export default function FamilyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { members, activeProfile, canManageFamily, addMember } = useAppState();
+  const { members, activeProfile, canManageFamily, addMember, events, dashboardEvents, tasks } = useAppState();
   const [showAddMember, setShowAddMember] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [draftRole, setDraftRole] = useState('');
   const [draftColor, setDraftColor] = useState(MEMBER_COLORS[0]);
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const today = getTodayCanonicalDate();
+  const allEvents = [...events, ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id))];
 
   function openAddMember() {
     if (!canManageFamily) return;
@@ -97,29 +113,45 @@ export default function FamilyScreen() {
           </Pressable>
         ) : null}
         <View style={styles.membersList}>
-          {members.map((member, i) => (
-            <Pressable key={member.id} style={[styles.memberCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]} onPress={() => router.push(`/family/member/${member.id}`)}>
-              <View style={[styles.cardLeftBorder, { backgroundColor: member.color }]} />
-              <View style={styles.memberTop}>
-                <MemberAvatar member={member} size={56} />
-                <View style={styles.memberInfo}>
-                  <Text style={[styles.memberName, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>{member.name}</Text>
-                  <Text style={[styles.memberRole, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{member.role}</Text>
+          {members.map((member) => {
+            const openTasksToday = tasks.filter((task) => (
+              !task.done &&
+              itemOccursOn(task, today) &&
+              isAssignedToPerson(task, member.id)
+            ));
+            const firstEventToday = allEvents.find((event) => (
+              itemOccursOn(event, today) &&
+              isAssignedToPerson(event, member.id)
+            ));
+
+            return (
+              <Pressable key={member.id} style={[styles.memberCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]} onPress={() => router.push(`/family/member/${member.id}`)}>
+                <View style={[styles.cardLeftBorder, { backgroundColor: member.color }]} />
+                <View style={styles.memberTop}>
+                  <MemberAvatar member={member} size={56} />
+                  <View style={styles.memberInfo}>
+                    <Text style={[styles.memberName, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>{member.name}</Text>
+                    <Text style={[styles.memberRole, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{member.role}</Text>
+                  </View>
                 </View>
-              </View>
-              <View style={styles.divider} />
-              <View style={styles.memberStats}>
-                <View style={styles.statRow}>
-                  <Feather name="check-square" size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{i === 0 ? '3 tasks due today' : i === 1 ? '1 task due today' : 'All tasks completed'}</Text>
+                <View style={styles.divider} />
+                <View style={styles.memberStats}>
+                  <View style={styles.statRow}>
+                    <Feather name="check-square" size={16} color={colors.mutedForeground} />
+                    <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+                      {taskSummary(openTasksToday.length)}
+                    </Text>
+                  </View>
+                  <View style={styles.statRow}>
+                    <Feather name="calendar" size={16} color={colors.mutedForeground} />
+                    <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
+                      {eventSummary(firstEventToday?.title, firstEventToday?.time)}
+                    </Text>
+                  </View>
                 </View>
-                <View style={styles.statRow}>
-                  <Feather name="calendar" size={16} color={colors.mutedForeground} />
-                  <Text style={[styles.statText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>{i === 0 ? 'Soccer practice at 5PM' : i === 1 ? 'No upcoming events' : 'Dentist appt tomorrow'}</Text>
-                </View>
-              </View>
-            </Pressable>
-          ))}
+              </Pressable>
+            );
+          })}
         </View>
       </ScrollView>
 

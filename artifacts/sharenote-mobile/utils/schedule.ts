@@ -12,6 +12,17 @@ export function toCanonicalDate(year: number, month: number, day: number) {
   return `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
 }
 
+export function getTodayCanonicalDate() {
+  const today = new Date();
+  return toCanonicalDate(today.getFullYear(), today.getMonth(), today.getDate());
+}
+
+export function getStartOfWeek(date: Date) {
+  const start = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+  start.setDate(start.getDate() - start.getDay());
+  return start;
+}
+
 export function parseCanonicalDate(value: string) {
   const [year, month, day] = value.split('-').map(Number);
   return new Date(year, month - 1, day);

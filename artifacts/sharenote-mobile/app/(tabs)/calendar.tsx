@@ -56,10 +56,11 @@ export default function CalendarScreen() {
   const colors = useColors();
   const router = useRouter();
   const { events, dashboardEvents, tasks, members, dashboardMembers, activeProfile, canManageFamily, deleteEvent, deleteTask } = useAppState();
+  const today = new Date();
 
-  const [viewYear, setViewYear] = useState(2025);
-  const [viewMonth, setViewMonth] = useState(7); // August
-  const [selectedDay, setSelectedDay] = useState(12);
+  const [viewYear, setViewYear] = useState(today.getFullYear());
+  const [viewMonth, setViewMonth] = useState(today.getMonth());
+  const [selectedDay, setSelectedDay] = useState(today.getDate());
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
@@ -195,7 +196,10 @@ export default function CalendarScreen() {
               <View key={wi} style={styles.weekRow}>
                 {week.map((day, di) => {
                   const isSelected = day === selectedDay;
-                  const isToday = viewYear === 2025 && viewMonth === 7 && day === 26; // hardcoded to match figma
+                  const isToday =
+                    viewYear === today.getFullYear() &&
+                    viewMonth === today.getMonth() &&
+                    day === today.getDate();
 
                   const dots = day ? dotsByDay[day] ?? [] : [];
 

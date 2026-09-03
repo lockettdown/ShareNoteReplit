@@ -19,12 +19,13 @@ import { EventDetailSheet } from '@/components/EventDetailSheet';
 import { TaskDetailSheet } from '@/components/TaskDetailSheet';
 import { AssignedMemberAvatars } from '@/components/AssignedMemberAvatars';
 import { getAssignedMembers } from '@/utils/assignments';
-import { itemOccursOn, parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
+import { getStartOfWeek, getTodayCanonicalDate, itemOccursOn, parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-const WEEK_START = new Date(2025, 7, 10);
+const TODAY_DATE = getTodayCanonicalDate();
+const WEEK_START = getStartOfWeek(parseCanonicalDate(TODAY_DATE));
 
 function formatLongDate(value: string) {
   const date = parseCanonicalDate(value);
@@ -50,7 +51,7 @@ export default function DashboardScreen() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
-  const [selectedDate, setSelectedDate] = useState('2025-08-12');
+  const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
