@@ -141,11 +141,28 @@ export function SchedulePickerFields({
     setVisiblePicker(null);
   }
 
+  function clearDate() {
+    Haptics.selectionAsync();
+    if (visiblePicker === 'endDate' && onEndDateChange) {
+      onEndDateChange('');
+    } else {
+      onDateChange('');
+    }
+    setVisiblePicker(null);
+  }
+
   function confirmTime() {
     const nextTime = `${draftTime.hour}:${draftTime.minute} ${draftTime.period}`;
     if (visiblePicker === 'starts') onStartsChange(nextTime);
     if (visiblePicker === 'ends') onEndsChange(nextTime);
     Haptics.selectionAsync();
+    setVisiblePicker(null);
+  }
+
+  function clearTime() {
+    Haptics.selectionAsync();
+    if (visiblePicker === 'starts') onStartsChange('');
+    if (visiblePicker === 'ends') onEndsChange('');
     setVisiblePicker(null);
   }
 
@@ -354,6 +371,14 @@ export function SchedulePickerFields({
                     );
                   })}
                 </View>
+                <Pressable
+                  onPress={clearDate}
+                  style={[styles.clearButton, { borderColor: colors.border }]}
+                >
+                  <Text style={[styles.clearText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
+                    Clear Date
+                  </Text>
+                </Pressable>
               </>
             ) : (
               <>
@@ -374,14 +399,24 @@ export function SchedulePickerFields({
                   </Text>
                   {timeOptionGroup(PERIODS, draftTime.period, 'period')}
                 </ScrollView>
-                <Pressable
-                  onPress={confirmTime}
-                  style={[styles.confirmButton, { backgroundColor: colors.primary }]}
-                >
-                  <Text style={[styles.confirmText, { color: '#ffffff', fontFamily: 'Inter_600SemiBold' }]}>
-                    Set Time
-                  </Text>
-                </Pressable>
+                <View style={styles.timeActions}>
+                  <Pressable
+                    onPress={clearTime}
+                    style={[styles.secondaryActionButton, { borderColor: colors.border }]}
+                  >
+                    <Text style={[styles.clearText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
+                      Clear
+                    </Text>
+                  </Pressable>
+                  <Pressable
+                    onPress={confirmTime}
+                    style={[styles.confirmButton, { backgroundColor: colors.primary }]}
+                  >
+                    <Text style={[styles.confirmText, { color: '#ffffff', fontFamily: 'Inter_600SemiBold' }]}>
+                      Set Time
+                    </Text>
+                  </Pressable>
+                </View>
               </>
             )}
           </Pressable>
@@ -462,6 +497,14 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   dayText: { fontSize: 15 },
+  clearButton: {
+    height: 48,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 14,
+  },
   timeScroller: { paddingTop: 18, paddingBottom: 12, gap: 10 },
   groupTitle: { fontSize: 12, textTransform: 'uppercase' },
   optionGrid: {
@@ -479,12 +522,26 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
   },
   optionText: { fontSize: 15 },
+  timeActions: {
+    flexDirection: 'row',
+    gap: 10,
+    marginTop: 8,
+  },
+  secondaryActionButton: {
+    width: 104,
+    height: 52,
+    borderRadius: 16,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   confirmButton: {
+    flex: 1,
     height: 52,
     borderRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 8,
   },
+  clearText: { fontSize: 16 },
   confirmText: { fontSize: 16 },
 });
