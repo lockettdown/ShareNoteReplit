@@ -64,8 +64,8 @@ export default function AddTaskScreen() {
   const [ends, setEnds] = useState(initialEndTime);
   const [details, setDetails] = useState(existingTask?.details ?? '');
   const [personIds, setPersonIds] = useState(initialSelectedPersonIds);
-  const [reminder, setReminder] = useState(REMINDER_OPTIONS[0]);
-  const [secondReminder, setSecondReminder] = useState(REMINDER_OPTIONS[0]);
+  const [reminder, setReminder] = useState(existingTask?.reminder ?? REMINDER_OPTIONS[0]);
+  const [secondReminder, setSecondReminder] = useState(existingTask?.secondReminder ?? REMINDER_OPTIONS[0]);
   const [repeat, setRepeat] = useState(existingTask?.repeat ?? REPEAT_OPTIONS[0]);
   const [repeatEndsOn, setRepeatEndsOn] = useState(existingTask?.repeatEndsOn ? canonicalToPickedDate(existingTask.repeatEndsOn) : '');
   const [repeatOccurrences, setRepeatOccurrences] = useState(existingTask?.repeatOccurrences ? String(existingTask.repeatOccurrences) : '');
@@ -114,6 +114,8 @@ export default function AddTaskScreen() {
       personIds: selectedPersonIds,
       color: assignableMembers.find(m => m.id === primaryPersonId)?.color || colors.primary,
       details: details.trim(),
+      reminder,
+      secondReminder,
     };
 
     if (existingTask) {

@@ -10,6 +10,7 @@ import {
   storeActiveProfileId,
   storeFamilyEmail,
 } from '@/utils/deviceProfileStorage';
+import { syncReminderNotifications } from '@/utils/reminderNotifications';
 import { profileCanManage } from '@/utils/profilePermissions';
 import { parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
@@ -35,6 +36,8 @@ export type AppEvent = {
   personIds?: string[];
   color: string;
   details?: string;
+  reminder?: string;
+  secondReminder?: string;
 };
 
 export type RepeatOption = 'None' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
@@ -54,6 +57,8 @@ export type AppTask = {
   done: boolean;
   color: string;
   details?: string;
+  reminder?: string;
+  secondReminder?: string;
 };
 
 export type GroceryItem = {
@@ -569,6 +574,29 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     profileTasks,
     tasks,
   ]);
+
+  useEffect(() => {
+    if (!hasLoadedRemoteState) return;
+
+    const uniqueEvents = [
+      ...events,
+      ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id)),
+    ];
+    const uniqueTasks = [
+      ...tasks,
+      ...profileTasks.filter((task) => !tasks.some((item) => item.id === task.id)),
+    ];
+
+    const timeout = setTimeout(() => {
+      syncReminderNotifications(uniqueEvents, uniqueTasks).catch((error) => {
+        console.warn('Unable to sync reminder notifications.', error);
+      });
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [dashboardEvents, events, hasLoadedRemoteState, profileTasks, tasks]);
 
   async function signInFamily(submittedFamilyEmail: string, password: string): Promise<AuthActionResult> {
     const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);

@@ -224,9 +224,6 @@ export default function CalendarScreen() {
               <Feather name="plus" size={18} color="#ffffff" />
             </Pressable>
           ) : null}
-          <Pressable accessibilityLabel="Alerts" style={styles.headerIconButton}>
-            <Feather name="bell" size={20} color={colors.primaryStrong} />
-          </Pressable>
         </View>
       </View>
 

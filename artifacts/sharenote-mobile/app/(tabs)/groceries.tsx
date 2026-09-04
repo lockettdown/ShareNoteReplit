@@ -130,9 +130,7 @@ export default function GroceriesScreen() {
         <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
           Our Home
         </Text>
-        <Pressable style={styles.headerRight}>
-          <Feather name="bell" size={20} color={colors.primaryStrong} />
-        </Pressable>
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 220 }]} showsVerticalScrollIndicator={false}>

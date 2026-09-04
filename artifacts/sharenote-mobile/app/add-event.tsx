@@ -89,8 +89,8 @@ export default function AddEventScreen() {
   const [ends, setEnds] = useState(initialEndTime);
   const [details, setDetails] = useState(existingEvent?.details ?? '');
   const [personIds, setPersonIds] = useState(initialSelectedPersonIds);
-  const [reminder, setReminder] = useState(REMINDER_OPTIONS[0]);
-  const [secondReminder, setSecondReminder] = useState(REMINDER_OPTIONS[0]);
+  const [reminder, setReminder] = useState(existingEvent?.reminder ?? REMINDER_OPTIONS[0]);
+  const [secondReminder, setSecondReminder] = useState(existingEvent?.secondReminder ?? REMINDER_OPTIONS[0]);
   const [repeat, setRepeat] = useState(existingEvent?.repeat ?? REPEAT_OPTIONS[0]);
   const [repeatEndsOn, setRepeatEndsOn] = useState(existingEvent?.repeatEndsOn ? canonicalToPickedDate(existingEvent.repeatEndsOn) : '');
   const [repeatOccurrences, setRepeatOccurrences] = useState(existingEvent?.repeatOccurrences ? String(existingEvent.repeatOccurrences) : '');
@@ -165,6 +165,8 @@ export default function AddEventScreen() {
       personIds: selectedPersonIds,
       color: assignableMembers.find(m => m.id === primaryPersonId)?.color || colors.primary,
       details: details.trim(),
+      reminder,
+      secondReminder,
     };
 
     if (existingEvent && isEditingRecurringEvent) {
