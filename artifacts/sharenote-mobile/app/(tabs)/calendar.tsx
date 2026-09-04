@@ -18,11 +18,12 @@ import { EventDetailSheet } from '@/components/EventDetailSheet';
 import { TaskDetailSheet } from '@/components/TaskDetailSheet';
 import { AssignedMemberAvatars } from '@/components/AssignedMemberAvatars';
 import { useRouter } from 'expo-router';
-import { getAssignedMembers } from '@/utils/assignments';
+import { getAssignedMembers, isAssignedToPerson } from '@/utils/assignments';
 import { itemOccursOn, toCanonicalDate } from '@/utils/schedule';
 
 const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 const DAY_LABELS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const EVERYONE_FILTER = 'everyone';
 
 function buildCalendarGrid(year: number, month: number) {
   const totalDays = new Date(year, month + 1, 0).getDate();
@@ -64,6 +65,9 @@ export default function CalendarScreen() {
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
   const [showQuickAdd, setShowQuickAdd] = useState(false);
+  const [showEvents, setShowEvents] = useState(true);
+  const [showTasks, setShowTasks] = useState(true);
+  const [selectedMemberId, setSelectedMemberId] = useState(EVERYONE_FILTER);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -71,22 +75,33 @@ export default function CalendarScreen() {
   const grid = buildCalendarGrid(viewYear, viewMonth);
   const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const allEvents = [...events, ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id))];
+  const selectedMember = allMembers.find((member) => member.id === selectedMemberId);
+  const profileFilteredEvents = selectedMemberId === EVERYONE_FILTER
+    ? allEvents
+    : allEvents.filter((event) => isAssignedToPerson(event, selectedMemberId));
+  const profileFilteredTasks = selectedMemberId === EVERYONE_FILTER
+    ? tasks
+    : tasks.filter((task) => isAssignedToPerson(task, selectedMemberId));
 
   const selectedDate = toCanonicalDate(viewYear, viewMonth, selectedDay);
   const displayItems = [
-    ...allEvents.map((event) => ({ ...event, kind: 'event' as const })),
-    ...tasks.map((task) => ({ ...task, kind: 'task' as const })),
+    ...(showEvents ? profileFilteredEvents.map((event) => ({ ...event, kind: 'event' as const })) : []),
+    ...(showTasks ? profileFilteredTasks.map((task) => ({ ...task, kind: 'task' as const })) : []),
   ]
     .filter((event) => itemOccursOn(event, selectedDate))
     .sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
-  const selectedDateLabel = `Schedule for ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
-  const dotsByDay = [...allEvents, ...tasks].reduce<Record<number, string[]>>((acc, item) => {
+  const selectedDateLabel = `${selectedMember?.nickname ?? 'Everyone'} - ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
+  const filteredCalendarItems = [
+    ...(showEvents ? profileFilteredEvents : []),
+    ...(showTasks ? profileFilteredTasks : []),
+  ];
+  const dotsByDay = filteredCalendarItems.reduce<Record<number, string[]>>((acc, item) => {
     for (let day = 1; day <= new Date(viewYear, viewMonth + 1, 0).getDate(); day++) {
       const dayDate = toCanonicalDate(viewYear, viewMonth, day);
       if (!itemOccursOn(item, dayDate)) continue;
       const colorsForDay = acc[day] ?? [];
       const assignedColors = getAssignedMembers(item, allMembers).map((member) => member.color);
-      const nextColors = assignedColors.length ? assignedColors : [item.color];
+      const nextColors = selectedMember ? [selectedMember.color] : assignedColors.length ? assignedColors : [item.color];
       acc[day] = [...colorsForDay, ...nextColors]
         .filter((color, index, colors) => colors.indexOf(color) === index)
         .slice(0, 3);
@@ -105,6 +120,17 @@ export default function CalendarScreen() {
     } else {
       setViewMonth(nextMonth);
     }
+  }
+
+  function toggleCalendarFilter(kind: 'events' | 'tasks') {
+    Haptics.selectionAsync();
+    if (kind === 'events') setShowEvents((current) => (current && !showTasks ? current : !current));
+    if (kind === 'tasks') setShowTasks((current) => (current && !showEvents ? current : !current));
+  }
+
+  function selectMemberFilter(memberId: string) {
+    Haptics.selectionAsync();
+    setSelectedMemberId(memberId);
   }
 
   function editSelectedEvent(event: AppEvent) {
@@ -172,6 +198,127 @@ export default function CalendarScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
+        <View style={styles.filtersSection}>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profileFilterRow}>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Show calendar items for everyone"
+              accessibilityState={{ selected: selectedMemberId === EVERYONE_FILTER }}
+              onPress={() => selectMemberFilter(EVERYONE_FILTER)}
+              style={[
+                styles.profileChip,
+                {
+                  backgroundColor: selectedMemberId === EVERYONE_FILTER ? colors.primary : colors.card,
+                  borderColor: selectedMemberId === EVERYONE_FILTER ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <View style={[styles.everyoneIcon, { backgroundColor: selectedMemberId === EVERYONE_FILTER ? 'rgba(255,255,255,0.18)' : colors.secondary }]}>
+                <Feather name="users" size={15} color={selectedMemberId === EVERYONE_FILTER ? '#ffffff' : colors.primaryStrong} />
+              </View>
+              <Text
+                style={[
+                  styles.profileChipText,
+                  {
+                    color: selectedMemberId === EVERYONE_FILTER ? '#ffffff' : colors.foreground,
+                    fontFamily: 'Inter_600SemiBold',
+                  },
+                ]}
+              >
+                Everyone
+              </Text>
+            </Pressable>
+            {allMembers.map((member) => {
+              const selected = member.id === selectedMemberId;
+              return (
+                <Pressable
+                  key={member.id}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Show calendar items for ${member.name}`}
+                  accessibilityState={{ selected }}
+                  onPress={() => selectMemberFilter(member.id)}
+                  style={[
+                    styles.profileChip,
+                    {
+                      backgroundColor: selected ? colors.primary : colors.card,
+                      borderColor: selected ? colors.primary : colors.border,
+                    },
+                  ]}
+                >
+                  <MemberAvatar member={member} size={28} borderWidth={selected ? 2 : 0} />
+                  <Text
+                    style={[
+                      styles.profileChipText,
+                      {
+                        color: selected ? '#ffffff' : colors.foreground,
+                        fontFamily: 'Inter_600SemiBold',
+                      },
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {member.nickname || member.name}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+
+          <View style={[styles.filterBar, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="Show events on calendar"
+              accessibilityState={{ checked: showEvents }}
+              onPress={() => toggleCalendarFilter('events')}
+              style={[
+                styles.filterToggle,
+                {
+                  backgroundColor: showEvents ? colors.primary : colors.secondary,
+                  borderColor: showEvents ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Feather name="calendar" size={16} color={showEvents ? '#ffffff' : colors.primaryStrong} />
+              <Text
+                style={[
+                  styles.filterToggleText,
+                  {
+                    color: showEvents ? '#ffffff' : colors.primaryStrong,
+                    fontFamily: 'Inter_600SemiBold',
+                  },
+                ]}
+              >
+                Events
+              </Text>
+            </Pressable>
+            <Pressable
+              accessibilityRole="switch"
+              accessibilityLabel="Show tasks on calendar"
+              accessibilityState={{ checked: showTasks }}
+              onPress={() => toggleCalendarFilter('tasks')}
+              style={[
+                styles.filterToggle,
+                {
+                  backgroundColor: showTasks ? colors.primary : colors.secondary,
+                  borderColor: showTasks ? colors.primary : colors.border,
+                },
+              ]}
+            >
+              <Feather name="check-square" size={16} color={showTasks ? '#ffffff' : colors.primaryStrong} />
+              <Text
+                style={[
+                  styles.filterToggleText,
+                  {
+                    color: showTasks ? '#ffffff' : colors.primaryStrong,
+                    fontFamily: 'Inter_600SemiBold',
+                  },
+                ]}
+              >
+                Tasks
+              </Text>
+            </Pressable>
+          </View>
+        </View>
+
         <View style={[styles.calendarCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
           <View style={styles.monthHeader}>
             <Pressable onPress={() => changeMonth(-1)} style={styles.navBtn}>
@@ -277,7 +424,7 @@ export default function CalendarScreen() {
           })}
           {displayItems.length === 0 && (
             <Text style={[styles.emptyState, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-              No events or tasks scheduled for this day.
+              No selected items scheduled for this day.
             </Text>
           )}
         </View>
@@ -373,6 +520,53 @@ const styles = StyleSheet.create({
   headerTitle: { fontSize: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 },
+  filtersSection: { gap: 12 },
+  profileFilterRow: {
+    gap: 10,
+    paddingVertical: 2,
+    paddingRight: 24,
+  },
+  profileChip: {
+    minHeight: 44,
+    maxWidth: 148,
+    borderRadius: 18,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingLeft: 8,
+    paddingRight: 14,
+  },
+  everyoneIcon: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileChipText: { flexShrink: 1, fontSize: 14 },
+  filterBar: {
+    flexDirection: 'row',
+    gap: 12,
+    borderRadius: 20,
+    padding: 8,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.05,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  filterToggle: {
+    flex: 1,
+    minHeight: 44,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingHorizontal: 12,
+  },
+  filterToggleText: { fontSize: 14 },
   calendarCard: {
     borderRadius: 32, padding: 24,
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.05, shadowRadius: 24, elevation: 4,
