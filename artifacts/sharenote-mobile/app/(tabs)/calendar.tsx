@@ -67,7 +67,7 @@ export default function CalendarScreen() {
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [showEvents, setShowEvents] = useState(true);
   const [showTasks, setShowTasks] = useState(true);
-  const [selectedMemberId, setSelectedMemberId] = useState(EVERYONE_FILTER);
+  const [selectedMemberIds, setSelectedMemberIds] = useState<string[] | null>(null);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -75,13 +75,23 @@ export default function CalendarScreen() {
   const grid = buildCalendarGrid(viewYear, viewMonth);
   const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const allEvents = [...events, ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id))];
-  const selectedMember = allMembers.find((member) => member.id === selectedMemberId);
-  const profileFilteredEvents = selectedMemberId === EVERYONE_FILTER
+  const allMemberIds = allMembers.map((member) => member.id);
+  const activeMemberIds = selectedMemberIds ?? allMemberIds;
+  const activeMemberIdSet = new Set(activeMemberIds);
+  const allProfilesSelected =
+    selectedMemberIds === null ||
+    (allMembers.length > 0 &&
+      activeMemberIds.length === allMembers.length &&
+      allMemberIds.every((memberId) => activeMemberIdSet.has(memberId)));
+  const selectedMember = activeMemberIds.length === 1
+    ? allMembers.find((member) => member.id === activeMemberIds[0])
+    : null;
+  const profileFilteredEvents = allProfilesSelected
     ? allEvents
-    : allEvents.filter((event) => isAssignedToPerson(event, selectedMemberId));
-  const profileFilteredTasks = selectedMemberId === EVERYONE_FILTER
+    : allEvents.filter((event) => activeMemberIds.some((memberId) => isAssignedToPerson(event, memberId)));
+  const profileFilteredTasks = allProfilesSelected
     ? tasks
-    : tasks.filter((task) => isAssignedToPerson(task, selectedMemberId));
+    : tasks.filter((task) => activeMemberIds.some((memberId) => isAssignedToPerson(task, memberId)));
 
   const selectedDate = toCanonicalDate(viewYear, viewMonth, selectedDay);
   const displayItems = [
@@ -90,7 +100,12 @@ export default function CalendarScreen() {
   ]
     .filter((event) => itemOccursOn(event, selectedDate))
     .sort((a, b) => timeToMinutes(a.time) - timeToMinutes(b.time));
-  const selectedDateLabel = `${selectedMember?.nickname ?? 'Everyone'} - ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
+  const selectedProfileLabel = allProfilesSelected
+    ? 'Everyone'
+    : selectedMember
+      ? selectedMember.nickname || selectedMember.name
+      : `${activeMemberIds.length} profiles`;
+  const selectedDateLabel = `${selectedProfileLabel} - ${MONTH_NAMES[viewMonth].substring(0, 3)} ${selectedDay}`;
   const filteredCalendarItems = [
     ...(showEvents ? profileFilteredEvents : []),
     ...(showTasks ? profileFilteredTasks : []),
@@ -100,8 +115,14 @@ export default function CalendarScreen() {
       const dayDate = toCanonicalDate(viewYear, viewMonth, day);
       if (!itemOccursOn(item, dayDate)) continue;
       const colorsForDay = acc[day] ?? [];
-      const assignedColors = getAssignedMembers(item, allMembers).map((member) => member.color);
-      const nextColors = selectedMember ? [selectedMember.color] : assignedColors.length ? assignedColors : [item.color];
+      const assignedMembers = getAssignedMembers(item, allMembers);
+      const assignedColors = assignedMembers.map((member) => member.color);
+      const filteredAssignedColors = assignedMembers
+        .filter((member) => activeMemberIdSet.has(member.id))
+        .map((member) => member.color);
+      const nextColors = allProfilesSelected
+        ? (assignedColors.length ? assignedColors : [item.color])
+        : (filteredAssignedColors.length ? filteredAssignedColors : [item.color]);
       acc[day] = [...colorsForDay, ...nextColors]
         .filter((color, index, colors) => colors.indexOf(color) === index)
         .slice(0, 3);
@@ -130,7 +151,19 @@ export default function CalendarScreen() {
 
   function selectMemberFilter(memberId: string) {
     Haptics.selectionAsync();
-    setSelectedMemberId(memberId);
+    if (memberId === EVERYONE_FILTER) {
+      setSelectedMemberIds(null);
+      return;
+    }
+
+    setSelectedMemberIds((current) => {
+      const currentIds = current ?? allMemberIds;
+      const selected = currentIds.includes(memberId);
+      if (!selected) return [...currentIds, memberId];
+
+      const nextIds = currentIds.filter((id) => id !== memberId);
+      return nextIds.length ? nextIds : currentIds;
+    });
   }
 
   function editSelectedEvent(event: AppEvent) {
@@ -186,9 +219,9 @@ export default function CalendarScreen() {
               onPress={() => {
                 setShowQuickAdd(true);
               }}
-              style={[styles.headerIconButton, { backgroundColor: colors.secondary }]}
+              style={[styles.headerIconButton, styles.addHeaderIconButton, { backgroundColor: colors.primary }]}
             >
-              <Feather name="plus" size={20} color={colors.primaryStrong} />
+              <Feather name="plus" size={18} color="#ffffff" />
             </Pressable>
           ) : null}
           <Pressable accessibilityLabel="Alerts" style={styles.headerIconButton}>
@@ -198,29 +231,35 @@ export default function CalendarScreen() {
       </View>
 
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
-        <View style={styles.filtersSection}>
+        <View style={[styles.filtersSection, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+          <View style={styles.filtersHeader}>
+            <Feather name="filter" size={14} color={colors.mutedForeground} />
+            <Text style={[styles.filtersTitle, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
+              Filters
+            </Text>
+          </View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.profileFilterRow}>
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Show calendar items for everyone"
-              accessibilityState={{ selected: selectedMemberId === EVERYONE_FILTER }}
+              accessibilityState={{ selected: allProfilesSelected }}
               onPress={() => selectMemberFilter(EVERYONE_FILTER)}
               style={[
                 styles.profileChip,
                 {
-                  backgroundColor: selectedMemberId === EVERYONE_FILTER ? colors.primary : colors.card,
-                  borderColor: selectedMemberId === EVERYONE_FILTER ? colors.primary : colors.border,
+                  backgroundColor: allProfilesSelected ? colors.secondary : colors.card,
+                  borderColor: allProfilesSelected ? colors.primary : colors.border,
                 },
               ]}
             >
-              <View style={[styles.everyoneIcon, { backgroundColor: selectedMemberId === EVERYONE_FILTER ? 'rgba(255,255,255,0.18)' : colors.secondary }]}>
-                <Feather name="users" size={15} color={selectedMemberId === EVERYONE_FILTER ? '#ffffff' : colors.primaryStrong} />
+              <View style={[styles.everyoneIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="users" size={13} color={colors.primaryStrong} />
               </View>
               <Text
                 style={[
                   styles.profileChipText,
                   {
-                    color: selectedMemberId === EVERYONE_FILTER ? '#ffffff' : colors.foreground,
+                    color: allProfilesSelected ? colors.primaryStrong : colors.foreground,
                     fontFamily: 'Inter_600SemiBold',
                   },
                 ]}
@@ -229,28 +268,28 @@ export default function CalendarScreen() {
               </Text>
             </Pressable>
             {allMembers.map((member) => {
-              const selected = member.id === selectedMemberId;
+              const selected = activeMemberIdSet.has(member.id);
               return (
                 <Pressable
                   key={member.id}
-                  accessibilityRole="button"
-                  accessibilityLabel={`Show calendar items for ${member.name}`}
-                  accessibilityState={{ selected }}
+                  accessibilityRole="checkbox"
+                  accessibilityLabel={`Filter calendar items for ${member.name}`}
+                  accessibilityState={{ checked: selected }}
                   onPress={() => selectMemberFilter(member.id)}
                   style={[
                     styles.profileChip,
                     {
-                      backgroundColor: selected ? colors.primary : colors.card,
+                      backgroundColor: selected ? colors.secondary : colors.card,
                       borderColor: selected ? colors.primary : colors.border,
                     },
                   ]}
                 >
-                  <MemberAvatar member={member} size={28} borderWidth={selected ? 2 : 0} />
+                  <MemberAvatar member={member} size={24} borderWidth={selected ? 2 : 0} />
                   <Text
                     style={[
                       styles.profileChipText,
                       {
-                        color: selected ? '#ffffff' : colors.foreground,
+                        color: selected ? colors.primaryStrong : colors.foreground,
                         fontFamily: 'Inter_600SemiBold',
                       },
                     ]}
@@ -263,7 +302,7 @@ export default function CalendarScreen() {
             })}
           </ScrollView>
 
-          <View style={[styles.filterBar, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+          <View style={styles.filterBar}>
             <Pressable
               accessibilityRole="switch"
               accessibilityLabel="Show events on calendar"
@@ -272,17 +311,17 @@ export default function CalendarScreen() {
               style={[
                 styles.filterToggle,
                 {
-                  backgroundColor: showEvents ? colors.primary : colors.secondary,
+                  backgroundColor: showEvents ? colors.secondary : colors.card,
                   borderColor: showEvents ? colors.primary : colors.border,
                 },
               ]}
             >
-              <Feather name="calendar" size={16} color={showEvents ? '#ffffff' : colors.primaryStrong} />
+              <Feather name="calendar" size={14} color={colors.primaryStrong} />
               <Text
                 style={[
                   styles.filterToggleText,
                   {
-                    color: showEvents ? '#ffffff' : colors.primaryStrong,
+                    color: showEvents ? colors.primaryStrong : colors.mutedForeground,
                     fontFamily: 'Inter_600SemiBold',
                   },
                 ]}
@@ -298,17 +337,17 @@ export default function CalendarScreen() {
               style={[
                 styles.filterToggle,
                 {
-                  backgroundColor: showTasks ? colors.primary : colors.secondary,
+                  backgroundColor: showTasks ? colors.secondary : colors.card,
                   borderColor: showTasks ? colors.primary : colors.border,
                 },
               ]}
             >
-              <Feather name="check-square" size={16} color={showTasks ? '#ffffff' : colors.primaryStrong} />
+              <Feather name="check-square" size={14} color={colors.primaryStrong} />
               <Text
                 style={[
                   styles.filterToggleText,
                   {
-                    color: showTasks ? '#ffffff' : colors.primaryStrong,
+                    color: showTasks ? colors.primaryStrong : colors.mutedForeground,
                     fontFamily: 'Inter_600SemiBold',
                   },
                 ]}
@@ -517,56 +556,68 @@ const styles = StyleSheet.create({
   headerLeft: { width: 84 },
   headerRight: { width: 84, flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 8 },
   headerIconButton: { width: 36, height: 36, borderRadius: 18, alignItems: 'center', justifyContent: 'center' },
+  addHeaderIconButton: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#ffffff' },
   headerTitle: { fontSize: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 },
-  filtersSection: { gap: 12 },
-  profileFilterRow: {
+  filtersSection: {
     gap: 10,
-    paddingVertical: 2,
+    borderRadius: 18,
+    padding: 12,
+    shadowOffset: { width: 0, height: 3 },
+    shadowOpacity: 0.04,
+    shadowRadius: 10,
+    elevation: 1,
+  },
+  filtersHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filtersTitle: {
+    fontSize: 12,
+    textTransform: 'uppercase',
+  },
+  profileFilterRow: {
+    gap: 8,
+    paddingVertical: 1,
     paddingRight: 24,
   },
   profileChip: {
-    minHeight: 44,
-    maxWidth: 148,
-    borderRadius: 18,
+    minHeight: 34,
+    maxWidth: 132,
+    borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
-    paddingLeft: 8,
-    paddingRight: 14,
+    gap: 6,
+    paddingLeft: 6,
+    paddingRight: 11,
   },
   everyoneIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 14,
+    width: 24,
+    height: 24,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  profileChipText: { flexShrink: 1, fontSize: 14 },
+  profileChipText: { flexShrink: 1, fontSize: 12 },
   filterBar: {
     flexDirection: 'row',
-    gap: 12,
-    borderRadius: 20,
-    padding: 8,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.05,
-    shadowRadius: 12,
-    elevation: 2,
+    flexWrap: 'wrap',
+    gap: 8,
   },
   filterToggle: {
-    flex: 1,
-    minHeight: 44,
-    borderRadius: 14,
+    minHeight: 34,
+    borderRadius: 999,
     borderWidth: 1,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
     paddingHorizontal: 12,
   },
-  filterToggleText: { fontSize: 14 },
+  filterToggleText: { fontSize: 12 },
   calendarCard: {
     borderRadius: 32, padding: 24,
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.05, shadowRadius: 24, elevation: 4,

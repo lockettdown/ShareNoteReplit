@@ -150,17 +150,7 @@ export default function MemberProfileScreen() {
         <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
           {member.name}
         </Text>
-        {canManageFamily ? (
-          <Pressable
-            accessibilityLabel={`Edit ${member.name}`}
-            onPress={openEditMember}
-            style={[styles.headerRight, styles.editButton, { backgroundColor: colors.secondary }]}
-          >
-            <Feather name="edit-2" size={18} color={colors.primaryStrong} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerRight} />
-        )}
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView
@@ -179,6 +169,25 @@ export default function MemberProfileScreen() {
               {member.role}
             </Text>
           </View>
+          {canManageFamily ? (
+            <Pressable
+              accessibilityLabel={`Edit ${member.name}`}
+              onPress={openEditMember}
+              style={({ pressed }) => [
+                styles.profileEditButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.82 : 1,
+                },
+              ]}
+            >
+              <Feather name="edit-2" size={16} color={colors.primaryStrong} />
+              <Text style={[styles.profileEditText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
+                Edit Profile
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {canManageFamily ? (
@@ -482,7 +491,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 },
   headerLeft: { width: 40 },
   headerRight: { width: 40, alignItems: 'center', justifyContent: 'center' },
-  editButton: { height: 40, borderRadius: 20 },
   headerTitle: { fontSize: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 },
@@ -490,6 +498,16 @@ const styles = StyleSheet.create({
   heroName: { fontSize: 24 },
   roleBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, gap: 6 },
   roleText: { fontSize: 13 },
+  profileEditButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  profileEditText: { fontSize: 14 },
   quickAddRow: { flexDirection: 'row', gap: 12 },
   quickAddButton: {
     flex: 1,

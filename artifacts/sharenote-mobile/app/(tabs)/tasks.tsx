@@ -77,10 +77,10 @@ export default function TasksScreen() {
             <Pressable
               testID="add-task-button"
               accessibilityLabel="Add task"
-              style={[styles.addBtn, { borderColor: colors.primary }]}
+              style={[styles.addBtn, { backgroundColor: colors.primary }]}
               onPress={() => router.push('/add-task')}
             >
-              <Feather name="plus" size={20} color={colors.primary} />
+              <Feather name="plus" size={18} color="#ffffff" />
             </Pressable>
           ) : null}
         </View>
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   sectionTitle: { fontSize: 24 },
-  addBtn: { width: 40, height: 40, borderRadius: 20, borderWidth: 1, alignItems: 'center', justifyContent: 'center' },
+  addBtn: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: '#ffffff', alignItems: 'center', justifyContent: 'center' },
   tasksList: { gap: 16 },
   taskCard: {
     borderRadius: 20, flexDirection: 'row', alignItems: 'center', padding: 20, paddingLeft: 24, gap: 16,
