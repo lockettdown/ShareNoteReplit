@@ -12,9 +12,10 @@ import {
 } from '@expo-google-fonts/inter';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { useFonts } from 'expo-font';
-import { Stack } from 'expo-router';
+import { Stack, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { AppStateProvider } from '@/context/AppState';
+import { AppStateProvider, useAppState } from '@/context/AppState';
+import { SubscriptionProvider, useSubscription } from '@/lib/revenuecat';
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -22,6 +23,18 @@ SplashScreen.preventAutoHideAsync();
 const queryClient = new QueryClient();
 
 function RootLayoutNav() {
+  const pathname = usePathname();
+  const router = useRouter();
+  const { authUser, isAuthLoading } = useAppState();
+  const { hasAccess, isLoading: isSubscriptionLoading } = useSubscription();
+
+  useEffect(() => {
+    if (isAuthLoading || isSubscriptionLoading || !authUser || hasAccess) return;
+    if (pathname !== '/subscription') {
+      router.replace('/subscription');
+    }
+  }, [authUser, hasAccess, isAuthLoading, isSubscriptionLoading, pathname, router]);
+
   return (
     <Stack>
       <Stack.Screen name="index" options={{ headerShown: false }} />
@@ -32,6 +45,7 @@ function RootLayoutNav() {
       <Stack.Screen name="add-event" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="add-task" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="home" options={{ headerShown: false }} />
+      <Stack.Screen name="subscription" options={{ headerShown: false }} />
       <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
       <Stack.Screen name="+not-found" options={{ headerShown: false }} />
     </Stack>
@@ -60,11 +74,13 @@ export default function RootLayout() {
       <ErrorBoundary>
         <AppStateProvider>
           <QueryClientProvider client={queryClient}>
-            <GestureHandlerRootView>
-              <KeyboardProvider>
-                <RootLayoutNav />
-              </KeyboardProvider>
-            </GestureHandlerRootView>
+            <SubscriptionProvider>
+              <GestureHandlerRootView>
+                <KeyboardProvider>
+                  <RootLayoutNav />
+                </KeyboardProvider>
+              </GestureHandlerRootView>
+            </SubscriptionProvider>
           </QueryClientProvider>
         </AppStateProvider>
       </ErrorBoundary>

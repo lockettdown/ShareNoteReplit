@@ -1,6 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { useRouter } from 'expo-router';
+import { type Href, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -142,6 +142,16 @@ export default function SettingsScreen() {
                 </View>
                 <Text style={[styles.accountRowLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
                   Profile Settings
+                </Text>
+                <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
+              </Pressable>
+              <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+              <Pressable style={styles.accountRow} onPress={() => router.push('/subscription' as Href)}>
+                <View style={[styles.accountRowIcon, { backgroundColor: colors.secondary }]}>
+                  <Feather name="star" size={16} color={colors.primary} />
+                </View>
+                <Text style={[styles.accountRowLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+                  ShareNote Premium
                 </Text>
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </Pressable>
