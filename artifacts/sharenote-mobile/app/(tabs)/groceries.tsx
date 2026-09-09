@@ -18,6 +18,7 @@ import { GroceryItem, useAppState } from '@/context/AppState';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
 import { MemberAvatar } from '@/components/MemberAvatar';
+import { GroceryDetailSheet } from '@/components/GroceryDetailSheet';
 import { useRouter } from 'expo-router';
 
 const GROCERY_CATEGORIES = [
@@ -407,41 +408,7 @@ export default function GroceriesScreen() {
         ) : null}
       </Modal>
 
-      <Modal visible={Boolean(selectedGrocery)} transparent animationType="fade" onRequestClose={() => setSelectedGrocery(null)}>
-        <Pressable
-          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => setSelectedGrocery(null)}
-        >
-          <Pressable
-            style={[styles.detailSheet, { backgroundColor: colors.card, shadowColor: colors.shadow }]}
-            onPress={() => null}
-          >
-            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
-            <View style={styles.sheetHeader}>
-              <View style={[styles.detailIcon, { backgroundColor: colors.secondary }]}>
-                <Feather name={getCategoryIcon(selectedGrocery?.category ?? 'Other')} size={26} color={colors.primaryStrong} />
-              </View>
-              <Pressable accessibilityLabel="Close grocery details" style={styles.sheetCloseButton} onPress={() => setSelectedGrocery(null)}>
-                <Feather name="x" size={22} color={colors.foreground} />
-              </Pressable>
-            </View>
-            <Text style={[styles.detailCategory, { color: colors.primaryStrong, fontFamily: 'Inter_700Bold' }]}>
-              {selectedGrocery?.category}
-            </Text>
-            <Text style={[styles.detailTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
-              {selectedGrocery?.name}
-            </Text>
-            <View style={[styles.detailInfoCard, { backgroundColor: colors.cardSoft }]}>
-              <Text style={[styles.detailInfoLabel, { color: colors.mutedForeground, fontFamily: 'Inter_600SemiBold' }]}>
-                Details
-              </Text>
-              <Text style={[styles.detailInfoText, { color: colors.foreground, fontFamily: 'Inter_400Regular' }]}>
-                {selectedGrocery?.details?.trim() || 'No details added.'}
-              </Text>
-            </View>
-          </Pressable>
-        </Pressable>
-      </Modal>
+      <GroceryDetailSheet grocery={selectedGrocery} onClose={() => setSelectedGrocery(null)} />
     </View>
   );
 }
@@ -503,11 +470,4 @@ const styles = StyleSheet.create({
   keyboardAccessory: { minHeight: 44, borderTopWidth: 1, alignItems: 'flex-end', justifyContent: 'center', paddingHorizontal: 16 },
   keyboardDoneButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 8 },
   keyboardDoneText: { fontSize: 16 },
-  detailSheet: { borderRadius: 28, padding: 24, gap: 16, shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.12, shadowRadius: 18, elevation: 8 },
-  detailIcon: { width: 64, height: 64, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
-  detailCategory: { fontSize: 13, textTransform: 'uppercase' },
-  detailTitle: { fontSize: 30 },
-  detailInfoCard: { borderRadius: 20, padding: 18, gap: 8 },
-  detailInfoLabel: { fontSize: 13, textTransform: 'uppercase' },
-  detailInfoText: { fontSize: 16, lineHeight: 23 },
 });

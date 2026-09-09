@@ -12,12 +12,13 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
-import { AppEvent, AppTask, useAppState } from '@/context/AppState';
+import { AppEvent, AppTask, GroceryItem, useAppState } from '@/context/AppState';
 import { useState } from 'react';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { EventDetailSheet } from '@/components/EventDetailSheet';
 import { TaskDetailSheet } from '@/components/TaskDetailSheet';
 import { AssignedMemberAvatars } from '@/components/AssignedMemberAvatars';
+import { GroceryDetailSheet } from '@/components/GroceryDetailSheet';
 import { getAssignedMembers } from '@/utils/assignments';
 import { getStartOfWeek, getTodayCanonicalDate, itemOccursOn, parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
@@ -46,17 +47,18 @@ export default function DashboardScreen() {
   const insets = useSafeAreaInsets();
   const colors = useColors();
   const router = useRouter();
-  const { familyName, activeProfile, canManageFamily, members, dashboardMembers, events, dashboardEvents, tasks, groceries, toggleTask, deleteEvent, deleteTask } = useAppState();
+  const { familyName, activeProfile, canManageFamily, members, dashboardMembers, events, dashboardEvents, tasks, groceries, toggleTask, toggleGroceryItem, deleteEvent, deleteTask } = useAppState();
 
   const [showQuickAdd, setShowQuickAdd] = useState(false);
   const [selectedEvent, setSelectedEvent] = useState<AppEvent | null>(null);
   const [selectedTask, setSelectedTask] = useState<AppTask | null>(null);
+  const [selectedGrocery, setSelectedGrocery] = useState<GroceryItem | null>(null);
   const [selectedDate, setSelectedDate] = useState(TODAY_DATE);
+  const [showGroceries, setShowGroceries] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
-  const groceryPreview = groceries.filter(grocery => grocery.displayOnDashboard);
   const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const allEvents = [...dashboardEvents, ...events.filter((event) => !dashboardEvents.some((item) => item.id === event.id))];
   const selectedEvents = allEvents.filter(e => itemOccursOn(e, selectedDate));
@@ -111,7 +113,7 @@ export default function DashboardScreen() {
         <View style={styles.headerRight} />
       </View>
 
-      <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
+      <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 220 }]} showsVerticalScrollIndicator={false}>
         <View style={styles.greetingSection}>
           <Text style={[styles.greetingTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
             Good Morning,{'\n'}{familyName}
@@ -250,15 +252,100 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <Text style={[styles.sectionTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Grocery</Text>
           <View style={[styles.groceryCard, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
-            {groceryPreview.map(grocery => (
-              <View key={grocery.id} style={styles.groceryPill}>
-                <View style={[styles.groceryDot, { backgroundColor: colors.primary }]} />
-                <Text style={[styles.groceryText, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>{grocery.name}</Text>
+            <View style={styles.groceryCardHeader}>
+              <Pressable
+                testID="toggle-dashboard-groceries"
+                accessibilityRole="button"
+                accessibilityLabel={`${showGroceries ? 'Hide' : 'Show'} all groceries`}
+                accessibilityState={{ expanded: showGroceries }}
+                style={styles.grocerySummary}
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  setShowGroceries((visible) => !visible);
+                }}
+              >
+                <View style={[styles.groceryIcon, { backgroundColor: colors.secondary }]}>
+                  <Feather name="shopping-cart" size={20} color={colors.primaryStrong} />
+                </View>
+                <View style={styles.grocerySummaryText}>
+                  <Text style={[styles.groceryCount, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                    {groceries.length} {groceries.length === 1 ? 'item' : 'items'}
+                  </Text>
+                  <Text style={[styles.groceryHint, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    {showGroceries ? 'Tap to collapse' : 'Tap to view the full list'}
+                  </Text>
+                </View>
+                <Feather name={showGroceries ? 'chevron-up' : 'chevron-down'} size={22} color={colors.mutedForeground} />
+              </Pressable>
+              <Pressable
+                testID="view-all-groceries"
+                accessibilityLabel="Open grocery list"
+                style={[styles.groceryAddBtn, { backgroundColor: colors.primary }]}
+                onPress={() => router.push('/(tabs)/groceries')}
+              >
+                <Feather name="plus" size={22} color="#fff" />
+              </Pressable>
+            </View>
+
+            {showGroceries ? (
+              <View style={[styles.groceryDropdown, { borderTopColor: colors.border }]}>
+                {groceries.length > 0 ? (
+                  <ScrollView
+                    nestedScrollEnabled
+                    style={styles.groceryList}
+                    contentContainerStyle={styles.groceryListContent}
+                    showsVerticalScrollIndicator={groceries.length > 5}
+                  >
+                    {groceries.map((grocery) => (
+                      <View key={grocery.id} style={styles.groceryRow}>
+                        <Pressable
+                          testID={`toggle-dashboard-grocery-${grocery.id}`}
+                          accessibilityRole="checkbox"
+                          accessibilityLabel={`${grocery.checked ? 'Restore' : 'Clear'} grocery item: ${grocery.name}`}
+                          accessibilityState={{ checked: grocery.checked }}
+                          style={styles.groceryToggle}
+                          onPress={() => {
+                            Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                            toggleGroceryItem(grocery.id);
+                          }}
+                        >
+                          <Feather
+                            name={grocery.checked ? 'check-circle' : 'circle'}
+                            size={20}
+                            color={grocery.checked ? colors.primary : colors.mutedForeground}
+                          />
+                        </Pressable>
+                        <Pressable
+                          accessibilityLabel={`View grocery details: ${grocery.name}`}
+                          style={styles.groceryItemContent}
+                          onPress={() => {
+                            Haptics.selectionAsync();
+                            setSelectedGrocery(grocery);
+                          }}
+                        >
+                          <Text
+                            style={[
+                              styles.groceryText,
+                              {
+                                color: grocery.checked ? colors.mutedForeground : colors.foreground,
+                                fontFamily: 'Inter_500Medium',
+                                textDecorationLine: grocery.checked ? 'line-through' : 'none',
+                              },
+                            ]}
+                          >
+                            {grocery.name}
+                          </Text>
+                        </Pressable>
+                      </View>
+                    ))}
+                  </ScrollView>
+                ) : (
+                  <Text style={[styles.groceryEmpty, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                    Your grocery list is empty.
+                  </Text>
+                )}
               </View>
-            ))}
-            <Pressable testID="view-all-groceries" accessibilityLabel="View all groceries" style={[styles.groceryAddBtn, { backgroundColor: colors.primary }]} onPress={() => router.push('/(tabs)/groceries')}>
-              <Feather name="plus" size={20} color="#fff" />
-            </Pressable>
+            ) : null}
           </View>
         </View>
 
@@ -346,6 +433,7 @@ export default function DashboardScreen() {
         onEdit={editSelectedTask}
         onDelete={deleteSelectedTask}
       />
+      <GroceryDetailSheet grocery={selectedGrocery} onClose={() => setSelectedGrocery(null)} />
     </View>
   );
 }
@@ -388,11 +476,22 @@ const styles = StyleSheet.create({
   divider: { height: 1, backgroundColor: '#ece6f5' },
   addTaskRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   addTaskText: { fontSize: 15 },
-  groceryCard: { borderRadius: 24, flexDirection: 'row', alignItems: 'center', padding: 12, gap: 12, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
-  groceryPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#f7f4fb', paddingHorizontal: 16, paddingVertical: 12, borderRadius: 8, gap: 8 },
-  groceryDot: { width: 6, height: 6, borderRadius: 3 },
+  groceryCard: { borderRadius: 24, padding: 12, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 12, elevation: 2 },
+  groceryCardHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  grocerySummary: { flex: 1, minHeight: 56, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 8 },
+  groceryIcon: { width: 42, height: 42, borderRadius: 14, alignItems: 'center', justifyContent: 'center' },
+  grocerySummaryText: { flex: 1, gap: 2 },
+  groceryCount: { fontSize: 15 },
+  groceryHint: { fontSize: 12 },
+  groceryDropdown: { borderTopWidth: 1, marginTop: 12, paddingTop: 8 },
+  groceryList: { maxHeight: 230 },
+  groceryListContent: { paddingVertical: 4 },
+  groceryRow: { minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 4 },
+  groceryToggle: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
+  groceryItemContent: { flex: 1, minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 },
   groceryText: { fontSize: 14 },
-  groceryAddBtn: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', marginLeft: 'auto', shadowColor: '#9b5cf6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
+  groceryEmpty: { fontSize: 14, textAlign: 'center', paddingVertical: 18 },
+  groceryAddBtn: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', shadowColor: '#9b5cf6', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
   modalOverlay: { flex: 1, justifyContent: 'flex-end' },
   modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, gap: 16 },
   modalDragHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },

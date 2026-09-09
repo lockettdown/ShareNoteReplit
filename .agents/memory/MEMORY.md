@@ -1,1 +1,2 @@
 - [expo-google-fonts useFonts conflict](expo-google-fonts-useFonts.md) — importing useFonts from two @expo-google-fonts packages causes a React null crash; always import useFonts from expo-font directly.
+- [Replit Expo managed session](replit-expo-managed-session.md) — Expo Go 57 requires the Replit session secret to be installed into Expo CLI state before Metro starts.
