@@ -130,7 +130,7 @@ export default function DashboardScreen() {
 
         {isTrialActive ? (
           <Pressable
-            accessibilityLabel={`${trialDaysRemaining} ${trialDaysRemaining === 1 ? 'day' : 'days'} left in your ShareNote trial. View subscription plans.`}
+            accessibilityLabel={`${trialDaysRemaining} ${trialDaysRemaining === 1 ? 'day' : 'days'} left in your Home Loopnest trial. View subscription plans.`}
             onPress={() => router.push('/subscription')}
             style={[styles.trialBanner, { backgroundColor: colors.secondary }]}
           >
@@ -139,7 +139,7 @@ export default function DashboardScreen() {
                 {trialDaysRemaining} {trialDaysRemaining === 1 ? 'day' : 'days'} left in your trial
               </Text>
               <Text style={[styles.trialBody, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-                Choose monthly or yearly billing to keep ShareNote.
+                Choose monthly or yearly billing to keep Home Loopnest.
               </Text>
             </View>
             <Feather name="chevron-right" size={20} color={colors.primaryStrong} />

@@ -19,12 +19,12 @@ export const LoginScreen = (): JSX.Element => {
         <header className="flex w-full flex-col items-center">
           <img
             className="relative z-[1] h-36 w-32"
-            alt="ShareNote logo"
+            alt="Home Loopnest logo"
             src="/figmaAssets/logo---icon-margin.svg"
           />
           <div className="relative z-0 flex max-w-sm flex-col items-center pt-8">
             <h1 className="mt-[-1px] whitespace-nowrap text-center text-[32px] font-bold leading-10 tracking-[-0.64px] text-[#1c1b1b] [font-family:'Montserrat',Helvetica]">
-              ShareNote
+              Home Loopnest
             </h1>
             <p className="mt-4 text-center text-lg font-normal leading-[26px] text-[#4a4454] [font-family:'Inter',Helvetica]">
               Welcome to your family&apos;s new home.

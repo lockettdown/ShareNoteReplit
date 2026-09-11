@@ -25,7 +25,7 @@ export const PREMIUM_BENEFITS = [
   {
     icon: 'heart',
     title: 'One plan for the family',
-    description: 'A single subscription keeps ShareNote available for your household.',
+    description: 'A single subscription keeps Home Loopnest available for your household.',
   },
 ] as const;
 

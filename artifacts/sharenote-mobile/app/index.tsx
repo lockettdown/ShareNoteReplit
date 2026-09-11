@@ -35,7 +35,7 @@ export default function WelcomeScreen() {
     return (
       <View style={[styles.root, styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.loadingText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
-          Loading ShareNote...
+          Loading Home Loopnest...
         </Text>
       </View>
     );
@@ -66,7 +66,7 @@ export default function WelcomeScreen() {
               { color: colors.foreground, fontFamily: 'Montserrat_700Bold' },
             ]}
           >
-            ShareNote
+            Home Loopnest
           </Text>
           <Text
             style={[

@@ -28,7 +28,7 @@ export const CreateFamilyScreen = (): JSX.Element => {
         <div className="flex flex-col items-center mt-16">
           <img
             className="h-20 w-[71px]"
-            alt="ShareNote logo"
+            alt="Home Loopnest logo"
             src="/figmaAssets/logo---icon-margin.svg"
           />
           <h1 className="mt-6 text-center text-[28px] font-bold leading-9 tracking-[-0.56px] text-[#1c1b1b] [font-family:'Montserrat',Helvetica]">

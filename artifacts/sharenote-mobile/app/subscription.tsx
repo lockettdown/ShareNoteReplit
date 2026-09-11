@@ -14,6 +14,10 @@ function planLabel(pkg: PurchasesPackage) {
   return pkg.product.title;
 }
 
+function planDescription(pkg: PurchasesPackage) {
+  return (pkg.product.description || pkg.product.title).replace(/sharenote/gi, 'Home Loopnest');
+}
+
 export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -28,7 +32,7 @@ export default function SubscriptionScreen() {
       return;
     }
     const active = await purchase(pkg);
-    if (active) setNotice('Your ShareNote Premium subscription is active.');
+    if (active) setNotice('Your Home Loopnest Premium subscription is active.');
   }
 
   async function confirmTestPurchase() {
@@ -52,7 +56,7 @@ export default function SubscriptionScreen() {
             <Feather name="arrow-left" size={24} color={colors.foreground} />
           </Pressable>
         )}
-        <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>ShareNote Premium</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>Home Loopnest Premium</Text>
         <View style={styles.headerSide} />
       </View>
 
@@ -68,15 +72,15 @@ export default function SubscriptionScreen() {
           </Text>
           <Text style={[styles.heroBody, { color: colors.primaryForeground, fontFamily: 'Inter_400Regular' }]}>
             {isSubscribed
-              ? 'ShareNote is ready for your whole family.'
+              ? 'Home Loopnest is ready for your whole family.'
               : isTrialActive
-                ? 'Enjoy full access during your 10-day trial. Subscribe to keep using ShareNote afterward.'
-                : 'Your 10-day trial has ended. Select monthly or yearly billing to continue using ShareNote.'}
+                ? 'Enjoy full access during your 10-day trial. Subscribe to keep using Home Loopnest afterward.'
+                : 'Your 10-day trial has ended. Select monthly or yearly billing to continue using Home Loopnest.'}
           </Text>
         </View>
 
         <View style={[styles.benefitsCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.benefitsTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Your ShareNote plan includes</Text>
+          <Text style={[styles.benefitsTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Your Home Loopnest plan includes</Text>
           {PREMIUM_BENEFITS.map((benefit) => (
             <View key={benefit.title} style={styles.benefitRow}>
               <View style={[styles.benefitIcon, { backgroundColor: colors.secondary }]}>
@@ -114,7 +118,7 @@ export default function SubscriptionScreen() {
                   <View style={styles.planRow}>
                     <View style={styles.planText}>
                       <Text style={[styles.planName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{planLabel(pkg)}</Text>
-                      <Text style={[styles.planDescription, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{pkg.product.description || pkg.product.title}</Text>
+                      <Text style={[styles.planDescription, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>{planDescription(pkg)}</Text>
                     </View>
                     <View style={styles.priceBlock}>
                       <Text style={[styles.price, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>{pkg.product.priceString}</Text>

@@ -151,7 +151,7 @@ export default function SettingsScreen() {
                   <Feather name="star" size={16} color={colors.primary} />
                 </View>
                 <Text style={[styles.accountRowLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
-                  ShareNote Premium
+                  Home Loopnest Premium
                 </Text>
                 <Feather name="chevron-right" size={16} color={colors.mutedForeground} />
               </Pressable>
