@@ -10,6 +10,6 @@ export function normalizeProfileRole(role?: string): ProfilePermissionRole {
   return isParentRole(role) ? 'Parent' : 'Child';
 }
 
-export function profileCanManage(profile?: FamilyMember | null) {
-  return isParentRole(profile?.role);
+export function profileCanManage(profile: FamilyMember | null | undefined, isServerAuthorized: boolean) {
+  return Boolean(isServerAuthorized && isParentRole(profile?.role));
 }

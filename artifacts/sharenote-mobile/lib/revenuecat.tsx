@@ -51,6 +51,21 @@ type SubscriptionContextValue = {
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
 let configured = false;
 
+type TrustedClockAnchor = {
+  serverTime: number;
+  monotonicTime: number;
+};
+
+function getMonotonicTime() {
+  const monotonicTime = globalThis.performance?.now?.();
+  return typeof monotonicTime === 'number' && Number.isFinite(monotonicTime) ? monotonicTime : null;
+}
+
+function getCustomerInfoRequestTime(customerInfo: CustomerInfo) {
+  const requestTime = new Date(customerInfo.requestDate).getTime();
+  return Number.isFinite(requestTime) ? requestTime : null;
+}
+
 function getApiKey() {
   const testKey = process.env.EXPO_PUBLIC_REVENUECAT_TEST_API_KEY;
   const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
@@ -80,29 +95,63 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const [isPurchasing, setIsPurchasing] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [clock, setClock] = useState(() => Date.now());
+  const [trustedTime, setTrustedTime] = useState<number | null>(null);
+  const trustedClockAnchorRef = useRef<TrustedClockAnchor | null>(null);
   const identifiedUserRef = useRef<string | null>(null);
 
+  const applyCustomerInfo = useCallback((info: CustomerInfo, trustRequestTime = false) => {
+    setCustomerInfo(info);
+    if (!trustRequestTime) return;
+
+    const requestTime = getCustomerInfoRequestTime(info);
+    const monotonicTime = getMonotonicTime();
+    if (requestTime === null || monotonicTime === null) {
+      trustedClockAnchorRef.current = null;
+      setTrustedTime(null);
+      return;
+    }
+
+    const previousAnchor = trustedClockAnchorRef.current;
+    const previousTrustedTime = previousAnchor
+      ? previousAnchor.serverTime + Math.max(0, monotonicTime - previousAnchor.monotonicTime)
+      : requestTime;
+    const serverTime = Math.max(requestTime, previousTrustedTime);
+
+    trustedClockAnchorRef.current = { serverTime, monotonicTime };
+    setTrustedTime(serverTime);
+  }, []);
+
   useEffect(() => {
-    const timer = setInterval(() => setClock(Date.now()), 60 * 1000);
+    const timer = setInterval(() => {
+      const anchor = trustedClockAnchorRef.current;
+      const monotonicTime = getMonotonicTime();
+      if (!anchor || monotonicTime === null) {
+        setTrustedTime(null);
+        return;
+      }
+      setTrustedTime(anchor.serverTime + Math.max(0, monotonicTime - anchor.monotonicTime));
+    }, 60 * 1000);
     return () => clearInterval(timer);
   }, []);
 
   const refresh = useCallback(async () => {
     try {
       setError(null);
+      if (Platform.OS !== 'web') {
+        await Purchases.invalidateCustomerInfoCache();
+      }
       const [nextOfferings, nextCustomerInfo] = await Promise.all([
         Purchases.getOfferings(),
         Purchases.getCustomerInfo(),
       ]);
       setOfferings(nextOfferings);
-      setCustomerInfo(nextCustomerInfo);
+      applyCustomerInfo(nextCustomerInfo, true);
     } catch (nextError) {
       setError(messageFromError(nextError));
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [applyCustomerInfo]);
 
   useEffect(() => {
     const { apiKey } = getApiKey();
@@ -131,12 +180,12 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
 
   useEffect(() => {
     if (!configured) return;
-    const listener = (info: CustomerInfo) => setCustomerInfo(info);
+    const listener = (info: CustomerInfo) => applyCustomerInfo(info);
     Purchases.addCustomerInfoUpdateListener(listener);
     return () => {
       Purchases.removeCustomerInfoUpdateListener(listener);
     };
-  }, []);
+  }, [applyCustomerInfo]);
 
   useEffect(() => {
     if (!configured || isAuthLoading) return;
@@ -152,21 +201,21 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
             ? await Purchases.logOut()
             : await Purchases.getCustomerInfo();
         identifiedUserRef.current = nextUserId;
-        setCustomerInfo(info);
+        applyCustomerInfo(info);
       } catch (nextError) {
         setError(messageFromError(nextError));
       }
     };
 
     void syncIdentity();
-  }, [authUser?.id, isAuthLoading]);
+  }, [applyCustomerInfo, authUser?.id, isAuthLoading]);
 
   const purchase = useCallback(async (pkg: PurchasesPackage) => {
     setIsPurchasing(true);
     setError(null);
     try {
       const result = await Purchases.purchasePackage(pkg);
-      setCustomerInfo(result.customerInfo);
+      applyCustomerInfo(result.customerInfo, true);
       return result.customerInfo.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
     } catch (nextError) {
       setError(messageFromError(nextError));
@@ -174,14 +223,14 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsPurchasing(false);
     }
-  }, []);
+  }, [applyCustomerInfo]);
 
   const restore = useCallback(async () => {
     setIsRestoring(true);
     setError(null);
     try {
       const info = await Purchases.restorePurchases();
-      setCustomerInfo(info);
+      applyCustomerInfo(info, true);
       return info.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
     } catch (nextError) {
       setError(messageFromError(nextError));
@@ -189,7 +238,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     } finally {
       setIsRestoring(false);
     }
-  }, []);
+  }, [applyCustomerInfo]);
 
   const packages = useMemo(() => {
     const available = offerings?.current?.availablePackages ?? [];
@@ -204,8 +253,8 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
     return new Date(createdAt.getTime() + TRIAL_DURATION_DAYS * 24 * 60 * 60 * 1000);
   }, [authUser?.created_at]);
   const isSubscribed = customerInfo?.entitlements.active[REVENUECAT_ENTITLEMENT_IDENTIFIER] !== undefined;
-  const trialMillisecondsRemaining = trialEndsAt ? trialEndsAt.getTime() - clock : 0;
-  const isTrialActive = Boolean(authUser && trialEndsAt && trialMillisecondsRemaining > 0);
+  const trialMillisecondsRemaining = trialEndsAt && trustedTime !== null ? trialEndsAt.getTime() - trustedTime : 0;
+  const isTrialActive = Boolean(authUser && trialEndsAt && trustedTime !== null && trialMillisecondsRemaining > 0);
   const trialDaysRemaining = isTrialActive
     ? Math.max(1, Math.ceil(trialMillisecondsRemaining / (24 * 60 * 60 * 1000)))
     : 0;

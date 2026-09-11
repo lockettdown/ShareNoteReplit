@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { AppState as NativeAppState } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
@@ -92,7 +93,7 @@ type AppStateContextType = {
   signInFamily: (familyEmail: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
   sendPasswordReset: (familyEmail: string) => Promise<AuthActionResult>;
-  selectActiveProfile: (profileId: string) => void;
+  selectActiveProfile: (profileId: string, parentPassword?: string) => Promise<AuthActionResult>;
   clearActiveProfile: () => void;
   addMember: (member: Omit<FamilyMember, 'id'>) => void;
   updateMember: (id: string, member: Omit<FamilyMember, 'id'>) => void;
@@ -386,17 +387,26 @@ async function loadFamilyState(userId: string) {
 async function saveFamilyState(userId: string, familyEmail: string, state: PersistedAppState) {
   if (!supabase) return;
 
-  const { error } = await supabase.from('family_states').upsert(
-    {
-      user_id: userId,
-      family_email: familyEmail,
-      state,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' },
-  );
+  const { error } = await supabase.rpc('save_family_state', {
+    requested_family_email: familyEmail,
+    requested_state: state,
+  });
 
   if (error) throw error;
+}
+
+async function createFamilyState(familyEmail: string, state: PersistedAppState) {
+  if (!supabase) return state;
+
+  const { data, error } = await supabase.rpc('create_family_state', {
+    requested_family_email: familyEmail,
+    requested_state: state,
+  });
+
+  if (error) throw error;
+  const storedState = coercePersistedState(data);
+  if (!storedState) throw new Error('Supabase did not return a valid family state.');
+  return storedState;
 }
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
@@ -420,14 +430,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     !storedFamilyEmail || !isSupabaseConfigured,
   );
   const [canPersistRemoteState, setCanPersistRemoteState] = useState(isSupabaseConfigured);
+  const [isActiveProfileAuthorized, setIsActiveProfileAuthorized] = useState(!isSupabaseConfigured);
   const skipNextRemoteLoadRef = useRef<string | null>(null);
+  const parentAuthorizationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const parentAuthorizationExpiresAtRef = useRef<number | null>(null);
 
   const allMembers = [
     ...members,
     ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id)),
   ];
   const activeProfile = allMembers.find((member) => member.id === activeProfileId) ?? null;
-  const canManageFamily = profileCanManage(activeProfile);
+  const canManageFamily = profileCanManage(activeProfile, isActiveProfileAuthorized);
 
   function applyPersistedState(nextState: PersistedAppState) {
     setFamilyName(nextState.familyName);
@@ -452,6 +465,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       clearStoredFamilyEmail();
       setFamilyEmail('');
       setActiveProfileId(null);
+      setIsActiveProfileAuthorized(false);
       applyPersistedState(INITIAL_REMOTE_STATE);
       setHasLoadedRemoteState(true);
       setCanPersistRemoteState(isSupabaseConfigured);
@@ -459,7 +473,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     }
 
     setFamilyEmail(nextFamilyEmail);
-    setActiveProfileId(getStoredActiveProfileId(nextFamilyEmail));
+    setActiveProfileId(null);
+    setIsActiveProfileAuthorized(false);
     storeFamilyEmail(nextFamilyEmail);
   }
 
@@ -493,6 +508,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   useEffect(() => {
+    const subscription = NativeAppState.addEventListener('change', (status) => {
+      const expiresAt = parentAuthorizationExpiresAtRef.current;
+      if (status === 'active' && expiresAt && Date.now() >= expiresAt) {
+        setIsActiveProfileAuthorized(false);
+      }
+    });
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
     const userId = authUser?.id;
 
     if (!familyEmail || !isSupabaseConfigured || !userId) {
@@ -513,9 +538,16 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setHasLoadedRemoteState(false);
 
     loadFamilyState(userId)
-      .then((remoteState) => {
+      .then(async (remoteState) => {
         if (cancelled) return;
-        applyPersistedState(remoteState ?? createInitialFamilyStateForUser(authUser));
+        const initialState = remoteState ?? createInitialFamilyStateForUser(authUser);
+        if (!remoteState) {
+          const createdState = await createFamilyState(familyEmail, initialState);
+          if (cancelled) return;
+          applyPersistedState(createdState);
+        } else {
+          applyPersistedState(initialState);
+        }
         setHasLoadedRemoteState(true);
       })
       .catch((error) => {
@@ -537,6 +569,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       || !isSupabaseConfigured
       || !hasLoadedRemoteState
       || !canPersistRemoteState
+      || !canManageFamily
     ) {
       return;
     }
@@ -553,6 +586,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         groceries,
       }).catch((error) => {
         console.warn('Unable to save family state to Supabase.', error);
+        setIsActiveProfileAuthorized(false);
+        loadFamilyState(authUser.id).then((remoteState) => {
+          if (remoteState) applyPersistedState(remoteState);
+        }).catch((loadError) => {
+          console.warn('Unable to restore family state after authorization expired.', loadError);
+        });
         setCanPersistRemoteState(false);
       });
     }, 500);
@@ -562,6 +601,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     };
   }, [
     canPersistRemoteState,
+    canManageFamily,
     dashboardEvents,
     dashboardMembers,
     events,
@@ -651,13 +691,58 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, message: 'Check your email for a reset link.' };
   }
 
-  function selectActiveProfile(profileId: string) {
+  async function selectActiveProfile(profileId: string, parentPassword?: string): Promise<AuthActionResult> {
+    if (supabase) {
+      const { data, error } = await supabase.rpc('select_family_profile', {
+        requested_profile_id: profileId,
+        parent_password: parentPassword ?? null,
+      });
+      if (error) {
+        setIsActiveProfileAuthorized(false);
+        return { ok: false, message: error.message };
+      }
+      if (!data) {
+        setIsActiveProfileAuthorized(false);
+        return { ok: false, message: 'The family password is incorrect or too many attempts were made.' };
+      }
+      let remoteState: PersistedAppState | null;
+      try {
+        remoteState = await loadFamilyState(authUser?.id ?? '');
+      } catch {
+        setIsActiveProfileAuthorized(false);
+        return { ok: false, message: 'Unable to load the authorized family state.' };
+      }
+      if (!remoteState) {
+        setIsActiveProfileAuthorized(false);
+        return { ok: false, message: 'Unable to load the authorized family state.' };
+      }
+      applyPersistedState(remoteState);
+      setCanPersistRemoteState(true);
+      if (parentPassword) {
+        parentAuthorizationExpiresAtRef.current = new Date(data as string).getTime();
+      }
+    }
+
     setActiveProfileId(profileId);
+    setIsActiveProfileAuthorized(true);
+    if (parentAuthorizationTimeoutRef.current) clearTimeout(parentAuthorizationTimeoutRef.current);
+    parentAuthorizationTimeoutRef.current = parentPassword
+      ? setTimeout(
+          () => setIsActiveProfileAuthorized(false),
+          Math.max(0, (parentAuthorizationExpiresAtRef.current ?? Date.now()) - Date.now()),
+        )
+      : null;
+    if (!parentPassword) parentAuthorizationExpiresAtRef.current = null;
     storeActiveProfileId(familyEmail, profileId);
+    return { ok: true };
   }
 
   function clearActiveProfile() {
+    if (parentAuthorizationTimeoutRef.current) clearTimeout(parentAuthorizationTimeoutRef.current);
+    parentAuthorizationTimeoutRef.current = null;
+    parentAuthorizationExpiresAtRef.current = null;
     setActiveProfileId(null);
+    setIsActiveProfileAuthorized(false);
     clearStoredActiveProfileId(familyEmail);
   }
 
@@ -677,6 +762,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
 
     const nextState = createInitialFamilyState(normalizedFamilyName, normalizedYourName);
     let canPersistNewState = isSupabaseConfigured;
+    let storedState = nextState;
 
     if (supabase) {
       const { data, error } = await supabase.auth.signUp({
@@ -702,7 +788,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       applySignedInSession(data.session);
       skipNextRemoteLoadRef.current = data.user.id;
       try {
-        await saveFamilyState(data.user.id, normalizedFamilyEmail, nextState);
+        storedState = await createFamilyState(normalizedFamilyEmail, nextState);
       } catch (error) {
         console.warn('Unable to save the new family state to Supabase.', error);
         canPersistNewState = false;
@@ -712,7 +798,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       storeFamilyEmail(normalizedFamilyEmail);
     }
 
-    applyPersistedState(nextState);
+    applyPersistedState(storedState);
     setCanPersistRemoteState(canPersistNewState);
     setHasLoadedRemoteState(true);
     setActiveProfileId(null);
