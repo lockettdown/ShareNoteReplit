@@ -1,5 +1,4 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { AppState as NativeAppState } from 'react-native';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
@@ -93,7 +92,7 @@ type AppStateContextType = {
   signInFamily: (familyEmail: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
   sendPasswordReset: (familyEmail: string) => Promise<AuthActionResult>;
-  selectActiveProfile: (profileId: string, parentPassword?: string) => Promise<AuthActionResult>;
+  selectActiveProfile: (profileId: string) => Promise<AuthActionResult>;
   clearActiveProfile: () => void;
   addMember: (member: Omit<FamilyMember, 'id'>) => void;
   updateMember: (id: string, member: Omit<FamilyMember, 'id'>) => void;
@@ -432,8 +431,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [canPersistRemoteState, setCanPersistRemoteState] = useState(isSupabaseConfigured);
   const [isActiveProfileAuthorized, setIsActiveProfileAuthorized] = useState(!isSupabaseConfigured);
   const skipNextRemoteLoadRef = useRef<string | null>(null);
-  const parentAuthorizationTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const parentAuthorizationExpiresAtRef = useRef<number | null>(null);
 
   const allMembers = [
     ...members,
@@ -505,16 +502,6 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       mounted = false;
       listener.subscription.unsubscribe();
     };
-  }, []);
-
-  useEffect(() => {
-    const subscription = NativeAppState.addEventListener('change', (status) => {
-      const expiresAt = parentAuthorizationExpiresAtRef.current;
-      if (status === 'active' && expiresAt && Date.now() >= expiresAt) {
-        setIsActiveProfileAuthorized(false);
-      }
-    });
-    return () => subscription.remove();
   }, []);
 
   useEffect(() => {
@@ -691,56 +678,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, message: 'Check your email for a reset link.' };
   }
 
-  async function selectActiveProfile(profileId: string, parentPassword?: string): Promise<AuthActionResult> {
-    if (supabase) {
-      const { data, error } = await supabase.rpc('select_family_profile', {
-        requested_profile_id: profileId,
-        parent_password: parentPassword ?? null,
-      });
-      if (error) {
-        setIsActiveProfileAuthorized(false);
-        return { ok: false, message: error.message };
-      }
-      if (!data) {
-        setIsActiveProfileAuthorized(false);
-        return { ok: false, message: 'The family password is incorrect or too many attempts were made.' };
-      }
-      let remoteState: PersistedAppState | null;
-      try {
-        remoteState = await loadFamilyState(authUser?.id ?? '');
-      } catch {
-        setIsActiveProfileAuthorized(false);
-        return { ok: false, message: 'Unable to load the authorized family state.' };
-      }
-      if (!remoteState) {
-        setIsActiveProfileAuthorized(false);
-        return { ok: false, message: 'Unable to load the authorized family state.' };
-      }
-      applyPersistedState(remoteState);
-      setCanPersistRemoteState(true);
-      if (parentPassword) {
-        parentAuthorizationExpiresAtRef.current = new Date(data as string).getTime();
-      }
+  async function selectActiveProfile(profileId: string): Promise<AuthActionResult> {
+    if (!allMembers.some((member) => member.id === profileId)) {
+      setIsActiveProfileAuthorized(false);
+      return { ok: false, message: 'This profile does not belong to this family.' };
     }
 
     setActiveProfileId(profileId);
     setIsActiveProfileAuthorized(true);
-    if (parentAuthorizationTimeoutRef.current) clearTimeout(parentAuthorizationTimeoutRef.current);
-    parentAuthorizationTimeoutRef.current = parentPassword
-      ? setTimeout(
-          () => setIsActiveProfileAuthorized(false),
-          Math.max(0, (parentAuthorizationExpiresAtRef.current ?? Date.now()) - Date.now()),
-        )
-      : null;
-    if (!parentPassword) parentAuthorizationExpiresAtRef.current = null;
     storeActiveProfileId(familyEmail, profileId);
     return { ok: true };
   }
 
   function clearActiveProfile() {
-    if (parentAuthorizationTimeoutRef.current) clearTimeout(parentAuthorizationTimeoutRef.current);
-    parentAuthorizationTimeoutRef.current = null;
-    parentAuthorizationExpiresAtRef.current = null;
     setActiveProfileId(null);
     setIsActiveProfileAuthorized(false);
     clearStoredActiveProfileId(familyEmail);

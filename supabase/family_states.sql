@@ -206,8 +206,7 @@ drop function if exists public.select_family_profile(text);
 drop function if exists public.select_family_profile(text, text);
 
 create or replace function public.select_family_profile(
-  requested_profile_id text,
-  parent_password text default null
+  requested_profile_id text
 )
 returns timestamptz
 language plpgsql
@@ -243,41 +242,13 @@ begin
     raise exception 'Profile does not belong to this family';
   end if;
 
-  if requested_role = 'parent' then
-    perform pg_advisory_xact_lock(hashtextextended(auth.uid()::text, 0));
-
-    if (
-      select count(*)
-      from public.family_parent_auth_attempts
-      where user_id = auth.uid()
-        and attempted_at > now() - interval '15 minutes'
-    ) >= 5 then
-      return null;
-    end if;
-
-    if parent_password is null or not exists (
-      select 1
-      from auth.users
-      where id = auth.uid()
-        and encrypted_password = extensions.crypt(parent_password, encrypted_password)
-    ) then
-      insert into public.family_parent_auth_attempts (user_id, session_id)
-      values (auth.uid(), public.current_family_session_id());
-      return null;
-    end if;
-
-    delete from public.family_parent_auth_attempts
-    where user_id = auth.uid()
-      and session_id = public.current_family_session_id();
-  end if;
-
   insert into public.family_profile_sessions (user_id, session_id, profile_id, authorized_at, expires_at)
   values (
     auth.uid(),
     public.current_family_session_id(),
     requested_profile_id,
     now(),
-    case when requested_role = 'parent' then now() + interval '15 minutes' else 'infinity'::timestamptz end
+    'infinity'::timestamptz
   )
   on conflict (user_id, session_id)
   do update set
@@ -328,10 +299,10 @@ revoke all on function public.current_family_session_id() from public;
 revoke all on function public.current_profile_can_manage() from public;
 revoke all on function public.family_state_is_valid(jsonb) from public;
 revoke all on function public.create_family_state(text, jsonb) from public;
-revoke all on function public.select_family_profile(text, text) from public;
+revoke all on function public.select_family_profile(text) from public;
 revoke all on function public.save_family_state(text, jsonb) from public;
 grant execute on function public.create_family_state(text, jsonb) to authenticated;
-grant execute on function public.select_family_profile(text, text) to authenticated;
+grant execute on function public.select_family_profile(text) to authenticated;
 grant execute on function public.save_family_state(text, jsonb) to authenticated;
 
 create policy "users can read their family state"
