@@ -25,7 +25,7 @@ export const PREMIUM_BENEFITS = [
   {
     icon: 'heart',
     title: 'One plan for the family',
-    description: 'A single subscription keeps Home Loopnest available for your household.',
+    description: 'A single subscription keeps Loopnest available for your household.',
   },
 ] as const;
 
@@ -50,6 +50,8 @@ type SubscriptionContextValue = {
 
 const SubscriptionContext = createContext<SubscriptionContextValue | null>(null);
 let configured = false;
+const usesRevenueCatBrowserMode =
+  Platform.OS === 'web' || Constants.executionEnvironment === 'storeClient';
 
 type TrustedClockAnchor = {
   serverTime: number;
@@ -137,7 +139,7 @@ export function SubscriptionProvider({ children }: { children: React.ReactNode }
   const refresh = useCallback(async () => {
     try {
       setError(null);
-      if (Platform.OS !== 'web') {
+      if (!usesRevenueCatBrowserMode) {
         await Purchases.invalidateCustomerInfoCache();
       }
       const [nextOfferings, nextCustomerInfo] = await Promise.all([

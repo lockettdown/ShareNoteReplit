@@ -1,4 +1,5 @@
 import {
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -58,7 +59,12 @@ export default function WelcomeScreen() {
       >
         <View style={styles.hero}>
           <View style={[styles.logoContainer, { shadowColor: colors.primary }]}>
-            <Feather name="users" size={48} color={colors.primary} />
+            <Image
+              source={require('../assets/loopnest-logo.png')}
+              accessibilityLabel="Loopnest family logo"
+              resizeMode="contain"
+              style={styles.logoImage}
+            />
           </View>
           <Text
             style={[
@@ -66,7 +72,7 @@ export default function WelcomeScreen() {
               { color: colors.foreground, fontFamily: 'Montserrat_700Bold' },
             ]}
           >
-            Home Loopnest
+            Loopnest
           </Text>
           <Text
             style={[
@@ -155,6 +161,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 24, elevation: 8,
     marginBottom: 32,
   },
+  logoImage: { width: 86, height: 86 },
   title: { fontSize: 32, textAlign: 'center', marginBottom: 12 },
   subtitle: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   actions: { gap: 16 },

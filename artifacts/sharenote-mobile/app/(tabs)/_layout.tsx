@@ -2,11 +2,12 @@ import React from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { useColors } from '@/hooks/useColors';
 import { Feather } from '@expo/vector-icons';
-import { Redirect, Tabs } from 'expo-router';
+import { Redirect, Tabs, useRouter } from 'expo-router';
 import { useAppState } from '@/context/AppState';
 
 export default function TabLayout() {
   const colors = useColors();
+  const router = useRouter();
   const { activeProfile } = useAppState();
   const isIOS = Platform.OS === 'ios';
   const isWeb = Platform.OS === 'web';
@@ -67,6 +68,12 @@ export default function TabLayout() {
       />
       <Tabs.Screen
         name="family"
+        listeners={{
+          tabPress: (event) => {
+            event.preventDefault();
+            router.replace('/(tabs)/family');
+          },
+        }}
         options={{
           title: 'Family',
           tabBarIcon: ({ color }) => <Feather name="users" size={22} color={color} />,

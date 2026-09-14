@@ -15,7 +15,9 @@ function planLabel(pkg: PurchasesPackage) {
 }
 
 function planDescription(pkg: PurchasesPackage) {
-  return (pkg.product.description || pkg.product.title).replace(/sharenote/gi, 'Home Loopnest');
+  return (pkg.product.description || pkg.product.title)
+    .replace(/sharenote/gi, 'Loopnest')
+    .replace(/Home Loopnest Premium/gi, 'Loopnest Premium');
 }
 
 export default function SubscriptionScreen() {
@@ -56,7 +58,7 @@ export default function SubscriptionScreen() {
             <Feather name="arrow-left" size={24} color={colors.foreground} />
           </Pressable>
         )}
-        <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>Home Loopnest Premium</Text>
+        <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>Loopnest Premium</Text>
         <View style={styles.headerSide} />
       </View>
 
@@ -80,7 +82,7 @@ export default function SubscriptionScreen() {
         </View>
 
         <View style={[styles.benefitsCard, { backgroundColor: colors.card }]}>
-          <Text style={[styles.benefitsTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Your Home Loopnest plan includes</Text>
+          <Text style={[styles.benefitsTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Your Loopnest plan includes</Text>
           {PREMIUM_BENEFITS.map((benefit) => (
             <View key={benefit.title} style={styles.benefitRow}>
               <View style={[styles.benefitIcon, { backgroundColor: colors.secondary }]}>
@@ -114,7 +116,11 @@ export default function SubscriptionScreen() {
                   onPress={() => { Haptics.selectionAsync(); void buy(pkg); }}
                   style={[styles.plan, { backgroundColor: colors.card, borderColor: yearly ? colors.primary : colors.border, shadowColor: colors.shadow }]}
                 >
-                  {yearly ? <Text style={[styles.badge, { backgroundColor: colors.secondary, color: colors.primaryStrong }]}>BEST VALUE</Text> : null}
+                  {yearly ? (
+                    <View style={[styles.badge, { backgroundColor: colors.secondary }]}>
+                      <Text style={[styles.badgeText, { color: colors.primaryStrong, fontFamily: 'Inter_700Bold' }]}>BEST VALUE</Text>
+                    </View>
+                  ) : null}
                   <View style={styles.planRow}>
                     <View style={styles.planText}>
                       <Text style={[styles.planName, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>{planLabel(pkg)}</Text>
@@ -158,7 +164,7 @@ export default function SubscriptionScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 60, paddingHorizontal: 24, paddingBottom: 16 },
   headerSide: { width: 36 },
   headerTitle: { fontSize: 20 },
   content: { paddingHorizontal: 24, gap: 20 },
@@ -179,12 +185,13 @@ const styles = StyleSheet.create({
   messageTitle: { fontSize: 17 },
   plans: { gap: 14 },
   plan: { borderWidth: 2, borderRadius: 20, padding: 18, gap: 10, shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.06, shadowRadius: 10, elevation: 2 },
-  badge: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5, fontSize: 11, fontFamily: 'Inter_700Bold' },
-  planRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  planText: { flex: 1, gap: 4 },
+  badge: { alignSelf: 'flex-start', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 },
+  badgeText: { fontSize: 11 },
+  planRow: { width: '100%', flexDirection: 'row', alignItems: 'center', gap: 12 },
+  planText: { flex: 1, minWidth: 0, gap: 4 },
   planName: { fontSize: 18 },
   planDescription: { fontSize: 13, lineHeight: 18 },
-  priceBlock: { alignItems: 'flex-end' },
+  priceBlock: { flexShrink: 0, alignItems: 'flex-end' },
   price: { fontSize: 21 },
   period: { fontSize: 12 },
   error: { fontSize: 14, textAlign: 'center' },
