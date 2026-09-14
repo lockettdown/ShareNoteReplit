@@ -1,8 +1,15 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useRouter } from 'expo-router';
-import { useEffect } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { useAppState } from '@/context/AppState';
@@ -15,6 +22,7 @@ export default function ProfileSelectScreen() {
   const colors = useColors();
   const {
     familyEmail,
+    hasFamily,
     isAuthLoading,
     isFamilyStateLoading,
     members,
@@ -26,17 +34,36 @@ export default function ProfileSelectScreen() {
   const allMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
+  const [authorizationError, setAuthorizationError] = useState('');
+  const [isAuthorizing, setIsAuthorizing] = useState(false);
 
   useEffect(() => {
-    if (!isAuthLoading && !familyEmail) {
-      router.replace('/sign-in');
+    if (!isAuthLoading && (!familyEmail || !hasFamily)) {
+      router.replace('/');
     }
-  }, [familyEmail, isAuthLoading, router]);
+  }, [familyEmail, hasFamily, isAuthLoading, router]);
+
+  async function authorizeProfile(profileId: string) {
+    setIsAuthorizing(true);
+    setAuthorizationError('');
+    let result;
+    try {
+      result = await selectActiveProfile(profileId);
+    } catch {
+      result = { ok: false, message: 'Unable to select this profile. Check your connection and try again.' };
+    } finally {
+      setIsAuthorizing(false);
+    }
+    if (!result.ok) {
+      setAuthorizationError(result.message ?? 'This profile could not be authorized.');
+      return;
+    }
+    void Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    router.replace('/(tabs)');
+  }
 
   function chooseProfile(profileId: string) {
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    selectActiveProfile(profileId);
-    router.replace('/(tabs)');
+    void authorizeProfile(profileId);
   }
 
   function useDifferentEmail() {
@@ -95,6 +122,7 @@ export default function ProfileSelectScreen() {
                     opacity: pressed ? 0.86 : 1,
                   },
                 ]}
+                disabled={isAuthorizing}
                 onPress={() => chooseProfile(member.id)}
               >
                 <View style={[styles.cardLeftBorder, { backgroundColor: member.color }]} />
@@ -138,6 +166,9 @@ export default function ProfileSelectScreen() {
             Use Different Email
           </Text>
         </Pressable>
+        {authorizationError ? (
+          <Text style={[styles.errorText, { color: colors.destructive }]}>{authorizationError}</Text>
+        ) : null}
       </ScrollView>
     </View>
   );
@@ -194,4 +225,5 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   secondaryButtonText: { fontSize: 15 },
+  errorText: { fontSize: 13, lineHeight: 18, textAlign: 'center' },
 });

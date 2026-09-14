@@ -10,7 +10,9 @@ import {
   storeActiveProfileId,
   storeFamilyEmail,
 } from '@/utils/deviceProfileStorage';
+import { syncReminderNotifications } from '@/utils/reminderNotifications';
 import { profileCanManage } from '@/utils/profilePermissions';
+import { parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
 export type FamilyMember = {
   id: string;
@@ -34,6 +36,8 @@ export type AppEvent = {
   personIds?: string[];
   color: string;
   details?: string;
+  reminder?: string;
+  secondReminder?: string;
 };
 
 export type RepeatOption = 'None' | 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
@@ -53,6 +57,8 @@ export type AppTask = {
   done: boolean;
   color: string;
   details?: string;
+  reminder?: string;
+  secondReminder?: string;
 };
 
 export type GroceryItem = {
@@ -69,6 +75,7 @@ type AppStateContextType = {
   authUser: User | null;
   isAuthLoading: boolean;
   isFamilyStateLoading: boolean;
+  hasFamily: boolean;
   familyEmail: string;
   familyName: string;
   activeProfileId: string | null;
@@ -86,7 +93,7 @@ type AppStateContextType = {
   signInFamily: (familyEmail: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
   sendPasswordReset: (familyEmail: string) => Promise<AuthActionResult>;
-  selectActiveProfile: (profileId: string) => void;
+  selectActiveProfile: (profileId: string) => Promise<AuthActionResult>;
   clearActiveProfile: () => void;
   addMember: (member: Omit<FamilyMember, 'id'>) => void;
   updateMember: (id: string, member: Omit<FamilyMember, 'id'>) => void;
@@ -99,6 +106,7 @@ type AppStateContextType = {
   ) => Promise<AuthActionResult>;
   addEvent: (event: Omit<AppEvent, 'id'>) => void;
   updateEvent: (id: string, event: Omit<AppEvent, 'id'>) => void;
+  updateRecurringEventOccurrence: (id: string, occurrenceDate: string, event: Omit<AppEvent, 'id'>) => void;
   deleteEvent: (id: string) => void;
   addTask: (task: Omit<AppTask, 'id' | 'done'>) => void;
   updateTask: (id: string, task: Omit<AppTask, 'id'>) => void;
@@ -128,59 +136,15 @@ type PersistedAppState = {
   groceries: GroceryItem[];
 };
 
-const INITIAL_MEMBERS: FamilyMember[] = [
-  { id: 'm1', name: 'David Smith', nickname: 'Dad', role: 'Parent', initials: 'DS', color: '#9b5cf6' },
-  { id: 'm2', name: 'Maya Smith', nickname: 'Mom', role: 'Parent', initials: 'MS', color: '#f6a53a' },
-  { id: 'm3', name: 'Leo Smith', nickname: 'Jake', role: 'Child', initials: 'LS', color: '#12c7a0' },
-];
-
-const INITIAL_DASHBOARD_MEMBERS: FamilyMember[] = [
-  ...INITIAL_MEMBERS,
-  { id: 'm4', name: 'Lily Smith', nickname: 'Lily', role: 'Child', initials: 'LY', color: '#f04e9b' },
-];
-
-const INITIAL_EVENTS: AppEvent[] = [
-  { id: 'e1', title: 'Dentist Appointment', time: '10:00 AM', date: '2025-08-12', personId: 'm2', color: '#5bb6ff' },
-  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#12c7a0' },
-  { id: 'e3', title: 'Family Dinner', time: '7:00 PM', date: '2025-08-12', personId: 'm1', color: '#9b5cf6' },
-];
-
-const INITIAL_DASHBOARD_EVENTS: AppEvent[] = [
-  { id: 'e2', title: 'Baseball Practice', time: '4:30 PM - 6:00 PM', date: '2025-08-12', personId: 'm3', color: '#12c7a0' },
-  { id: 'e4', title: 'Piano Lesson', time: '6:00 PM - 7:00 PM', date: '2025-08-12', personId: 'm4', color: '#f04e9b' },
-];
-
-const INITIAL_TASKS: AppTask[] = [
-  { id: 't1', title: 'Take out garbage', time: '8:00 AM', date: '2025-08-12', location: 'Home', personId: 'm1', done: false, color: '#9b5cf6' },
-  { id: 't2', title: 'Finish homework', time: '4:00 PM', date: '2025-08-12', location: 'School', personId: 'm3', done: false, color: '#12c7a0' },
-  { id: 't3', title: 'Grocery shopping', time: '5:00 PM', date: '2025-08-12', location: 'Personal', personId: 'm2', done: false, color: '#f6a53a' },
-];
-
-const INITIAL_PROFILE_TASKS: AppTask[] = [
-  { id: 't4', title: 'Buy Groceries', time: '', date: '2025-08-12', location: 'Weekly Shop', personId: 'm1', done: false, color: '#9b5cf6' },
-  { id: 't5', title: 'Fix the sink', time: '', date: '2025-08-12', location: 'Kitchen', personId: 'm1', done: false, color: '#12c7a0' },
-  { id: 't6', title: 'Pay bills', time: '', date: '2025-08-12', location: 'Due Today', personId: 'm1', done: false, color: '#5bb6ff' },
-];
-
-const INITIAL_GROCERIES: GroceryItem[] = [
-  { id: 'g1', name: 'Apples (Honeycrisp)', category: 'Produce', checked: false, personId: 'm1' },
-  { id: 'g2', name: 'Spinach', category: 'Produce', checked: false },
-  { id: 'g3', name: 'Oat Milk', category: 'Dairy & Fridge', checked: false },
-  { id: 'g4', name: 'Greek Yogurt (Vanilla)', category: 'Dairy & Fridge', checked: false },
-  { id: 'g5', name: 'Milk', category: 'Dairy & Fridge', checked: true, displayOnDashboard: true },
-  { id: 'g6', name: 'Eggs', category: 'Dairy & Fridge', checked: true, displayOnDashboard: true },
-  { id: 'g7', name: 'Bread', category: 'Bakery', checked: true, displayOnDashboard: true },
-];
-
-const INITIAL_REMOTE_STATE: PersistedAppState = {
-  familyName: 'Smith Family',
-  members: INITIAL_MEMBERS,
-  dashboardMembers: INITIAL_DASHBOARD_MEMBERS,
-  events: INITIAL_EVENTS,
-  dashboardEvents: INITIAL_DASHBOARD_EVENTS,
-  tasks: INITIAL_TASKS,
-  profileTasks: INITIAL_PROFILE_TASKS,
-  groceries: INITIAL_GROCERIES,
+const EMPTY_FAMILY_STATE: PersistedAppState = {
+  familyName: '',
+  members: [],
+  dashboardMembers: [],
+  events: [],
+  dashboardEvents: [],
+  tasks: [],
+  profileTasks: [],
+  groceries: [],
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -191,21 +155,34 @@ function coercePersistedState(value: unknown): PersistedAppState | null {
   if (!isRecord(value)) return null;
 
   return {
-    familyName: typeof value.familyName === 'string' ? value.familyName : INITIAL_REMOTE_STATE.familyName,
-    members: Array.isArray(value.members) ? (value.members as FamilyMember[]) : INITIAL_REMOTE_STATE.members,
+    familyName: typeof value.familyName === 'string' ? value.familyName : '',
+    members: Array.isArray(value.members) ? (value.members as FamilyMember[]) : [],
     dashboardMembers: Array.isArray(value.dashboardMembers)
       ? (value.dashboardMembers as FamilyMember[])
-      : INITIAL_REMOTE_STATE.dashboardMembers,
-    events: Array.isArray(value.events) ? (value.events as AppEvent[]) : INITIAL_REMOTE_STATE.events,
+      : [],
+    events: Array.isArray(value.events) ? (value.events as AppEvent[]) : [],
     dashboardEvents: Array.isArray(value.dashboardEvents)
       ? (value.dashboardEvents as AppEvent[])
-      : INITIAL_REMOTE_STATE.dashboardEvents,
-    tasks: Array.isArray(value.tasks) ? (value.tasks as AppTask[]) : INITIAL_REMOTE_STATE.tasks,
+      : [],
+    tasks: Array.isArray(value.tasks) ? (value.tasks as AppTask[]) : [],
     profileTasks: Array.isArray(value.profileTasks)
       ? (value.profileTasks as AppTask[])
-      : INITIAL_REMOTE_STATE.profileTasks,
-    groceries: Array.isArray(value.groceries) ? (value.groceries as GroceryItem[]) : INITIAL_REMOTE_STATE.groceries,
+      : [],
+    groceries: Array.isArray(value.groceries) ? (value.groceries as GroceryItem[]) : [],
   };
+}
+
+function isLegacyDemoState(state: PersistedAppState) {
+  const membersById = new Map([
+    ...state.members,
+    ...state.dashboardMembers,
+  ].map((member) => [member.id, member.name]));
+
+  return state.familyName === 'Smith Family'
+    && membersById.get('m1') === 'David Smith'
+    && membersById.get('m2') === 'Maya Smith'
+    && membersById.get('m3') === 'Leo Smith'
+    && membersById.get('m4') === 'Lily Smith';
 }
 
 function createInitialFamilyState(familyName: string, yourName: string): PersistedAppState {
@@ -232,17 +209,121 @@ function createInitialFamilyState(familyName: string, yourName: string): Persist
   };
 }
 
-function createInitialFamilyStateForUser(user: User): PersistedAppState {
-  const metadata = user.user_metadata;
-  const familyName = typeof metadata.family_name === 'string' && metadata.family_name.trim()
-    ? metadata.family_name.trim()
-    : 'My Family';
-  const fallbackName = user.email?.split('@')[0] ?? 'Me';
-  const yourName = typeof metadata.display_name === 'string' && metadata.display_name.trim()
-    ? metadata.display_name.trim()
-    : fallbackName;
+function daysBetween(start: Date, end: Date) {
+  const startUtc = Date.UTC(start.getFullYear(), start.getMonth(), start.getDate());
+  const endUtc = Date.UTC(end.getFullYear(), end.getMonth(), end.getDate());
+  return Math.round((endUtc - startUtc) / 86400000);
+}
 
-  return createInitialFamilyState(familyName, yourName);
+function addDays(value: string, days: number) {
+  const date = parseCanonicalDate(value);
+  date.setDate(date.getDate() + days);
+  return toCanonicalDate(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function addMonthsClamped(value: string, months: number) {
+  const date = parseCanonicalDate(value);
+  const targetYear = date.getFullYear();
+  const targetMonth = date.getMonth() + months;
+  const daysInTargetMonth = new Date(targetYear, targetMonth + 1, 0).getDate();
+  const clampedDate = new Date(targetYear, targetMonth, Math.min(date.getDate(), daysInTargetMonth));
+  return toCanonicalDate(clampedDate.getFullYear(), clampedDate.getMonth(), clampedDate.getDate());
+}
+
+function addYearsClamped(value: string, years: number) {
+  const date = parseCanonicalDate(value);
+  const targetYear = date.getFullYear() + years;
+  const daysInTargetMonth = new Date(targetYear, date.getMonth() + 1, 0).getDate();
+  const clampedDate = new Date(targetYear, date.getMonth(), Math.min(date.getDate(), daysInTargetMonth));
+  return toCanonicalDate(clampedDate.getFullYear(), clampedDate.getMonth(), clampedDate.getDate());
+}
+
+function getOccurrenceStart(event: AppEvent, index: number) {
+  const repeat = event.repeat ?? 'None';
+  if (repeat === 'Daily') return addDays(event.date, index);
+  if (repeat === 'Weekly') return addDays(event.date, index * 7);
+  if (repeat === 'Monthly') return addMonthsClamped(event.date, index);
+  if (repeat === 'Yearly') return addYearsClamped(event.date, index);
+  return event.date;
+}
+
+function occurrenceIsAvailable(event: AppEvent, occurrenceStart: string, index: number) {
+  if (event.repeatOccurrences && index >= event.repeatOccurrences) return false;
+  if (event.repeatEndsOn && daysBetween(parseCanonicalDate(event.repeatEndsOn), parseCanonicalDate(occurrenceStart)) > 0) return false;
+  return true;
+}
+
+function getOccurrenceInfo(event: AppEvent, selectedDate: string) {
+  const repeat = event.repeat ?? 'None';
+  const durationDays = Math.max(0, daysBetween(parseCanonicalDate(event.date), parseCanonicalDate(event.endDate || event.date)));
+  const selected = parseCanonicalDate(selectedDate);
+  let index = 0;
+
+  while (index < 10000) {
+    const occurrenceStart = getOccurrenceStart(event, index);
+    if (!occurrenceIsAvailable(event, occurrenceStart, index)) return null;
+
+    const start = parseCanonicalDate(occurrenceStart);
+    const end = parseCanonicalDate(addDays(occurrenceStart, durationDays));
+    if (daysBetween(start, selected) >= 0 && daysBetween(selected, end) >= 0) {
+      return { index, occurrenceStart, durationDays };
+    }
+    if (daysBetween(selected, start) > 0 || repeat === 'None') return null;
+    index += 1;
+  }
+
+  return null;
+}
+
+function moveEventDuration(event: AppEvent, startDate: string, durationDays: number): AppEvent {
+  return {
+    ...event,
+    date: startDate,
+    endDate: durationDays > 0 ? addDays(startDate, durationDays) : undefined,
+  };
+}
+
+function createOneTimeEvent(event: Omit<AppEvent, 'id'>, id: string): AppEvent {
+  return {
+    ...event,
+    id,
+    repeat: 'None',
+    repeatEndsOn: undefined,
+    repeatOccurrences: undefined,
+  };
+}
+
+function buildOccurrenceUpdateEvents(original: AppEvent, occurrenceDate: string, event: Omit<AppEvent, 'id'>, timestamp: number): AppEvent[] {
+  const info = getOccurrenceInfo(original, occurrenceDate) ?? {
+    index: 0,
+    occurrenceStart: original.date,
+    durationDays: Math.max(0, daysBetween(parseCanonicalDate(original.date), parseCanonicalDate(original.endDate || original.date))),
+  };
+  const replacement = createOneTimeEvent(event, `${original.id}-occurrence-${timestamp}`);
+  const nextEvents: AppEvent[] = [];
+
+  if (info.index > 0) {
+    const previousOccurrenceStart = getOccurrenceStart(original, info.index - 1);
+    nextEvents.push({
+      ...original,
+      repeatEndsOn: previousOccurrenceStart,
+      repeatOccurrences: original.repeatOccurrences ? info.index : undefined,
+    });
+  }
+
+  nextEvents.push(replacement);
+
+  const nextOccurrenceIndex = info.index + 1;
+  const nextOccurrenceStart = getOccurrenceStart(original, nextOccurrenceIndex);
+  if (occurrenceIsAvailable(original, nextOccurrenceStart, nextOccurrenceIndex)) {
+    nextEvents.push({
+      ...moveEventDuration(original, nextOccurrenceStart, info.durationDays),
+      id: `${original.id}-series-${timestamp}`,
+      repeatOccurrences: original.repeatOccurrences ? original.repeatOccurrences - nextOccurrenceIndex : undefined,
+    });
+  }
+
+  return nextEvents;
 }
 
 async function loadFamilyState(userId: string) {
@@ -262,17 +343,26 @@ async function loadFamilyState(userId: string) {
 async function saveFamilyState(userId: string, familyEmail: string, state: PersistedAppState) {
   if (!supabase) return;
 
-  const { error } = await supabase.from('family_states').upsert(
-    {
-      user_id: userId,
-      family_email: familyEmail,
-      state,
-      updated_at: new Date().toISOString(),
-    },
-    { onConflict: 'user_id' },
-  );
+  const { error } = await supabase.rpc('save_family_state', {
+    requested_family_email: familyEmail,
+    requested_state: state,
+  });
 
   if (error) throw error;
+}
+
+async function createFamilyState(familyEmail: string, state: PersistedAppState) {
+  if (!supabase) return state;
+
+  const { data, error } = await supabase.rpc('create_family_state', {
+    requested_family_email: familyEmail,
+    requested_state: state,
+  });
+
+  if (error) throw error;
+  const storedState = coercePersistedState(data);
+  if (!storedState) throw new Error('Supabase did not return a valid family state.');
+  return storedState;
 }
 
 export function AppStateProvider({ children }: { children: React.ReactNode }) {
@@ -281,14 +371,15 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
   const [authUser, setAuthUser] = useState<User | null>(null);
   const [isAuthLoading, setIsAuthLoading] = useState(isSupabaseConfigured);
   const [familyEmail, setFamilyEmail] = useState(storedFamilyEmail);
-  const [familyName, setFamilyName] = useState('Smith Family');
-  const [members, setMembers] = useState<FamilyMember[]>(INITIAL_MEMBERS);
-  const [dashboardMembers, setDashboardMembers] = useState<FamilyMember[]>(INITIAL_DASHBOARD_MEMBERS);
-  const [events, setEvents] = useState<AppEvent[]>(INITIAL_EVENTS);
-  const [dashboardEvents, setDashboardEvents] = useState<AppEvent[]>(INITIAL_DASHBOARD_EVENTS);
-  const [tasks, setTasks] = useState<AppTask[]>(INITIAL_TASKS);
-  const [profileTasks, setProfileTasks] = useState<AppTask[]>(INITIAL_PROFILE_TASKS);
-  const [groceries, setGroceries] = useState<GroceryItem[]>(INITIAL_GROCERIES);
+  const [hasFamily, setHasFamily] = useState(false);
+  const [familyName, setFamilyName] = useState('');
+  const [members, setMembers] = useState<FamilyMember[]>([]);
+  const [dashboardMembers, setDashboardMembers] = useState<FamilyMember[]>([]);
+  const [events, setEvents] = useState<AppEvent[]>([]);
+  const [dashboardEvents, setDashboardEvents] = useState<AppEvent[]>([]);
+  const [tasks, setTasks] = useState<AppTask[]>([]);
+  const [profileTasks, setProfileTasks] = useState<AppTask[]>([]);
+  const [groceries, setGroceries] = useState<GroceryItem[]>([]);
   const [activeProfileId, setActiveProfileId] = useState<string | null>(
     getStoredActiveProfileId(storedFamilyEmail),
   );
@@ -296,6 +387,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     !storedFamilyEmail || !isSupabaseConfigured,
   );
   const [canPersistRemoteState, setCanPersistRemoteState] = useState(isSupabaseConfigured);
+  const [isActiveProfileAuthorized, setIsActiveProfileAuthorized] = useState(!isSupabaseConfigured);
   const skipNextRemoteLoadRef = useRef<string | null>(null);
 
   const allMembers = [
@@ -303,7 +395,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id)),
   ];
   const activeProfile = allMembers.find((member) => member.id === activeProfileId) ?? null;
-  const canManageFamily = profileCanManage(activeProfile);
+  const canManageFamily = profileCanManage(activeProfile, isActiveProfileAuthorized);
 
   function applyPersistedState(nextState: PersistedAppState) {
     setFamilyName(nextState.familyName);
@@ -328,14 +420,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       clearStoredFamilyEmail();
       setFamilyEmail('');
       setActiveProfileId(null);
-      applyPersistedState(INITIAL_REMOTE_STATE);
+      setIsActiveProfileAuthorized(false);
+      setHasFamily(false);
+      applyPersistedState(EMPTY_FAMILY_STATE);
       setHasLoadedRemoteState(true);
       setCanPersistRemoteState(isSupabaseConfigured);
       return;
     }
 
     setFamilyEmail(nextFamilyEmail);
-    setActiveProfileId(getStoredActiveProfileId(nextFamilyEmail));
+    setActiveProfileId(null);
+    setIsActiveProfileAuthorized(false);
     storeFamilyEmail(nextFamilyEmail);
   }
 
@@ -389,9 +484,17 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setHasLoadedRemoteState(false);
 
     loadFamilyState(userId)
-      .then((remoteState) => {
+      .then(async (remoteState) => {
         if (cancelled) return;
-        applyPersistedState(remoteState ?? createInitialFamilyStateForUser(authUser));
+        if (!remoteState || isLegacyDemoState(remoteState)) {
+          setHasFamily(false);
+          applyPersistedState(EMPTY_FAMILY_STATE);
+          setActiveProfileId(null);
+          clearStoredActiveProfileId(familyEmail);
+        } else {
+          setHasFamily(true);
+          applyPersistedState(remoteState);
+        }
         setHasLoadedRemoteState(true);
       })
       .catch((error) => {
@@ -410,9 +513,11 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (
       !authUser?.id
       || !familyEmail
+      || !hasFamily
       || !isSupabaseConfigured
       || !hasLoadedRemoteState
       || !canPersistRemoteState
+      || !canManageFamily
     ) {
       return;
     }
@@ -429,6 +534,12 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         groceries,
       }).catch((error) => {
         console.warn('Unable to save family state to Supabase.', error);
+        setIsActiveProfileAuthorized(false);
+        loadFamilyState(authUser.id).then((remoteState) => {
+          if (remoteState) applyPersistedState(remoteState);
+        }).catch((loadError) => {
+          console.warn('Unable to restore family state after authorization expired.', loadError);
+        });
         setCanPersistRemoteState(false);
       });
     }, 500);
@@ -438,6 +549,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     };
   }, [
     canPersistRemoteState,
+    canManageFamily,
     dashboardEvents,
     dashboardMembers,
     events,
@@ -446,10 +558,34 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     familyName,
     groceries,
     hasLoadedRemoteState,
+    hasFamily,
     members,
     profileTasks,
     tasks,
   ]);
+
+  useEffect(() => {
+    if (!hasLoadedRemoteState) return;
+
+    const uniqueEvents = [
+      ...events,
+      ...dashboardEvents.filter((event) => !events.some((item) => item.id === event.id)),
+    ];
+    const uniqueTasks = [
+      ...tasks,
+      ...profileTasks.filter((task) => !tasks.some((item) => item.id === task.id)),
+    ];
+
+    const timeout = setTimeout(() => {
+      syncReminderNotifications(uniqueEvents, uniqueTasks).catch((error) => {
+        console.warn('Unable to sync reminder notifications.', error);
+      });
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [dashboardEvents, events, hasLoadedRemoteState, profileTasks, tasks]);
 
   async function signInFamily(submittedFamilyEmail: string, password: string): Promise<AuthActionResult> {
     const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
@@ -487,7 +623,8 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setFamilyEmail('');
     setActiveProfileId(null);
     clearStoredFamilyEmail();
-    applyPersistedState(INITIAL_REMOTE_STATE);
+    setHasFamily(false);
+    applyPersistedState(EMPTY_FAMILY_STATE);
     if (supabase && authSession) {
       await supabase.auth.signOut();
     }
@@ -504,13 +641,21 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     return { ok: true, message: 'Check your email for a reset link.' };
   }
 
-  function selectActiveProfile(profileId: string) {
+  async function selectActiveProfile(profileId: string): Promise<AuthActionResult> {
+    if (!allMembers.some((member) => member.id === profileId)) {
+      setIsActiveProfileAuthorized(false);
+      return { ok: false, message: 'This profile does not belong to this family.' };
+    }
+
     setActiveProfileId(profileId);
+    setIsActiveProfileAuthorized(true);
     storeActiveProfileId(familyEmail, profileId);
+    return { ok: true };
   }
 
   function clearActiveProfile() {
     setActiveProfileId(null);
+    setIsActiveProfileAuthorized(false);
     clearStoredActiveProfileId(familyEmail);
   }
 
@@ -524,14 +669,23 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     const normalizedYourName = submittedYourName.trim();
     const normalizedFamilyEmail = normalizeFamilyEmail(submittedFamilyEmail);
     const normalizedPassword = password.trim();
-    if (!normalizedFamilyName || !normalizedYourName || !normalizedFamilyEmail || !normalizedPassword) {
+    if (!normalizedFamilyName || !normalizedYourName || (!authUser && (!normalizedFamilyEmail || !normalizedPassword))) {
       return { ok: false, message: 'Complete every field to create your family.' };
     }
 
     const nextState = createInitialFamilyState(normalizedFamilyName, normalizedYourName);
     let canPersistNewState = isSupabaseConfigured;
+    let storedState = nextState;
+    const accountEmail = normalizeFamilyEmail(authUser?.email ?? normalizedFamilyEmail);
 
-    if (supabase) {
+    if (supabase && authUser) {
+      try {
+        storedState = await createFamilyState(accountEmail, nextState);
+      } catch (error) {
+        console.warn('Unable to save the new family state to Supabase.', error);
+        return { ok: false, message: 'Unable to create your family. Please try again.' };
+      }
+    } else if (supabase) {
       const { data, error } = await supabase.auth.signUp({
         email: normalizedFamilyEmail,
         password: normalizedPassword,
@@ -555,21 +709,22 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       applySignedInSession(data.session);
       skipNextRemoteLoadRef.current = data.user.id;
       try {
-        await saveFamilyState(data.user.id, normalizedFamilyEmail, nextState);
+        storedState = await createFamilyState(accountEmail, nextState);
       } catch (error) {
         console.warn('Unable to save the new family state to Supabase.', error);
         canPersistNewState = false;
       }
     } else {
-      setFamilyEmail(normalizedFamilyEmail);
-      storeFamilyEmail(normalizedFamilyEmail);
+      setFamilyEmail(accountEmail);
+      storeFamilyEmail(accountEmail);
     }
 
-    applyPersistedState(nextState);
+    applyPersistedState(storedState);
+    setHasFamily(true);
     setCanPersistRemoteState(canPersistNewState);
     setHasLoadedRemoteState(true);
     setActiveProfileId(null);
-    clearStoredActiveProfileId(normalizedFamilyEmail);
+    clearStoredActiveProfileId(accountEmail);
     return { ok: true };
   }
 
@@ -622,6 +777,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setDashboardEvents((prev) => prev.map((item) => (item.id === id ? { ...event, id } : item)));
   }
 
+  function updateRecurringEventOccurrence(id: string, occurrenceDate: string, event: Omit<AppEvent, 'id'>) {
+    const timestamp = Date.now();
+    const updateCollection = (items: AppEvent[]) => {
+      const original = items.find((item) => item.id === id);
+      if (!original) return items;
+      const replacementEvents = buildOccurrenceUpdateEvents(original, occurrenceDate, event, timestamp);
+      return items.flatMap((item) => (item.id === id ? replacementEvents : [item]));
+    };
+
+    setEvents(updateCollection);
+    setDashboardEvents(updateCollection);
+  }
+
   function deleteEvent(id: string) {
     setEvents((prev) => prev.filter((item) => item.id !== id));
     setDashboardEvents((prev) => prev.filter((item) => item.id !== id));
@@ -664,9 +832,9 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     <AppStateContext.Provider
       value={{
         authUser, isAuthLoading, isFamilyStateLoading: Boolean(familyEmail && isSupabaseConfigured && !hasLoadedRemoteState),
-        familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
+        hasFamily, familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
         members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
-        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
+        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, updateRecurringEventOccurrence, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
         addGroceryItem, toggleGroceryItem, removeGroceryItem,
       }}
     >

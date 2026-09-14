@@ -1,4 +1,5 @@
 import {
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -74,13 +75,18 @@ export default function SignInScreen() {
       >
         <View style={styles.header}>
           <View style={[styles.logoContainer, { shadowColor: colors.primary }]}>
-            <Feather name="home" size={32} color={colors.primary} />
+            <Image
+              source={require('../assets/loopnest-logo.png')}
+              accessibilityLabel="Loopnest family logo"
+              resizeMode="contain"
+              style={styles.logoImage}
+            />
           </View>
           <Text style={[styles.title, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
             Sign In
           </Text>
           <Text style={[styles.subtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-            Welcome back to your family hub.
+            Welcome back to your family loop.
           </Text>
         </View>
 
@@ -184,6 +190,7 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 16, elevation: 4,
     marginBottom: 24,
   },
+  logoImage: { width: 62, height: 62 },
   title: { fontSize: 32, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, textAlign: 'center' },
   card: {

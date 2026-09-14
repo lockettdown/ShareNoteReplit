@@ -1,4 +1,5 @@
 import {
+  Image,
   Platform,
   Pressable,
   StyleSheet,
@@ -16,7 +17,15 @@ export default function WelcomeScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { activeProfile, familyEmail, isAuthLoading, isFamilyStateLoading } = useAppState();
+  const {
+    activeProfile,
+    authUser,
+    familyEmail,
+    hasFamily,
+    isAuthLoading,
+    isFamilyStateLoading,
+    signOut,
+  } = useAppState();
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
@@ -31,18 +40,24 @@ export default function WelcomeScreen() {
     router.push('/sign-in');
   }
 
+  async function handleJoinFamily() {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await signOut();
+    router.push('/sign-in');
+  }
+
   if (isAuthLoading || isFamilyStateLoading) {
     return (
       <View style={[styles.root, styles.centered, { backgroundColor: colors.background }]}>
         <Text style={[styles.loadingText, { color: colors.mutedForeground, fontFamily: 'Inter_500Medium' }]}>
-          Loading ShareNote...
+          Loading Home Loopnest...
         </Text>
       </View>
     );
   }
 
-  if (familyEmail && activeProfile) return <Redirect href="/(tabs)" />;
-  if (familyEmail) return <Redirect href="/profile-select" />;
+  if (familyEmail && hasFamily && activeProfile) return <Redirect href="/(tabs)" />;
+  if (familyEmail && hasFamily) return <Redirect href="/profile-select" />;
 
   return (
     <View style={[styles.root, { backgroundColor: colors.background }]}>
@@ -58,7 +73,12 @@ export default function WelcomeScreen() {
       >
         <View style={styles.hero}>
           <View style={[styles.logoContainer, { shadowColor: colors.primary }]}>
-            <Feather name="users" size={48} color={colors.primary} />
+            <Image
+              source={require('../assets/loopnest-logo.png')}
+              accessibilityLabel="Loopnest family logo"
+              resizeMode="contain"
+              style={styles.logoImage}
+            />
           </View>
           <Text
             style={[
@@ -66,7 +86,7 @@ export default function WelcomeScreen() {
               { color: colors.foreground, fontFamily: 'Montserrat_700Bold' },
             ]}
           >
-            ShareNote
+            Loopnest
           </Text>
           <Text
             style={[
@@ -74,7 +94,9 @@ export default function WelcomeScreen() {
               { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' },
             ]}
           >
-            {'Welcome to your family\'s new home.\nCoordinate, connect, and simplify.'}
+            {authUser
+              ? 'Create a family or join an existing family to get started.'
+              : 'Welcome to your family\'s new home.\nCoordinate, connect, and simplify.'}
           </Text>
         </View>
 
@@ -113,7 +135,7 @@ export default function WelcomeScreen() {
                 transform: [{ scale: pressed ? 0.98 : 1 }],
               },
             ]}
-            onPress={handleSignIn}
+            onPress={authUser ? handleJoinFamily : handleSignIn}
           >
             <Text
               style={[
@@ -121,7 +143,7 @@ export default function WelcomeScreen() {
                 { color: colors.primary, fontFamily: 'Inter_600SemiBold' },
               ]}
             >
-              Sign In
+              {authUser ? 'Join Existing Family' : 'Sign In'}
             </Text>
           </Pressable>
         </View>
@@ -155,6 +177,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1, shadowRadius: 24, elevation: 8,
     marginBottom: 32,
   },
+  logoImage: { width: 86, height: 86 },
   title: { fontSize: 32, textAlign: 'center', marginBottom: 12 },
   subtitle: { fontSize: 16, lineHeight: 24, textAlign: 'center' },
   actions: { gap: 16 },
