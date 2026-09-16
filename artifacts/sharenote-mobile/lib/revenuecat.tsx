@@ -75,10 +75,12 @@ function getRevenueCatConfiguration() {
   const iosKey = process.env.EXPO_PUBLIC_REVENUECAT_IOS_API_KEY;
   const androidKey = process.env.EXPO_PUBLIC_REVENUECAT_ANDROID_API_KEY;
   const isTestMode = __DEV__ || Platform.OS === 'web' || Constants.executionEnvironment === 'storeClient';
-  const isBypassMode = isRevenueCatBypassEnabled(
-    __DEV__,
-    process.env.EXPO_PUBLIC_REVENUECAT_BYPASS,
-  );
+  const isBypassMode = isRevenueCatBypassEnabled({
+    isDevelopment: __DEV__,
+    flag: process.env.EXPO_PUBLIC_REVENUECAT_BYPASS,
+    platform: Platform.OS,
+    executionEnvironment: Constants.executionEnvironment,
+  });
 
   if (isTestMode) return { apiKey: testKey, isTestMode, isBypassMode };
   if (Platform.OS === 'ios') return { apiKey: iosKey, isTestMode, isBypassMode };

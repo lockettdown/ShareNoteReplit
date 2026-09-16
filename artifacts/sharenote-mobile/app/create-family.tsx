@@ -19,7 +19,7 @@ export default function CreateFamilyScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { authUser, createFamily } = useAppState();
+  const { createFamily } = useAppState();
 
   const [familyName, setFormFamilyName] = useState('');
   const [yourName, setYourName] = useState('');
@@ -37,7 +37,7 @@ export default function CreateFamilyScreen() {
     const normalizedFamilyName = familyName.trim();
     const normalizedYourName = yourName.trim();
     const normalizedEmail = email.trim();
-    if (!normalizedFamilyName || !normalizedYourName || (!authUser && (!normalizedEmail || !password.trim()))) {
+    if (!normalizedFamilyName || !normalizedYourName || !normalizedEmail || !password.trim()) {
       setMessage('Complete every field to create your family.');
       setIsSuccessMessage(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -146,7 +146,7 @@ export default function CreateFamilyScreen() {
             </View>
           </View>
 
-          {!authUser ? <View style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
               Email Address
             </Text>
@@ -165,9 +165,9 @@ export default function CreateFamilyScreen() {
                 returnKeyType="next"
               />
             </View>
-          </View> : null}
+          </View>
 
-          {!authUser ? <View style={styles.fieldGroup}>
+          <View style={styles.fieldGroup}>
             <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
               Password
             </Text>
@@ -186,7 +186,7 @@ export default function CreateFamilyScreen() {
                 onSubmitEditing={handleSubmit}
               />
             </View>
-          </View> : null}
+          </View>
 
           <Pressable
             testID="submit-btn"

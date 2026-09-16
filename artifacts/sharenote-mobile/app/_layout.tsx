@@ -30,7 +30,7 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isAuthLoading || isFamilyStateLoading || isSubscriptionLoading || !authUser || !hasFamily || hasAccess) return;
-    if (pathname !== '/subscription') {
+    if (pathname !== '/subscription' && pathname !== '/reset-password') {
       router.replace('/subscription');
     }
   }, [authUser, hasAccess, hasFamily, isAuthLoading, isFamilyStateLoading, isSubscriptionLoading, pathname, router]);
@@ -43,6 +43,7 @@ function RootLayoutNav() {
     && pathname !== '/'
     && pathname !== '/create-family'
     && pathname !== '/sign-in'
+    && pathname !== '/reset-password'
   ) {
     return <Redirect href="/" />;
   }
@@ -54,6 +55,7 @@ function RootLayoutNav() {
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
       <Stack.Screen name="profile-select" options={{ headerShown: false }} />
       <Stack.Screen name="forgot-password" options={{ headerShown: false }} />
+      <Stack.Screen name="reset-password" options={{ headerShown: false }} />
       <Stack.Screen name="add-event" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="add-task" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="home" options={{ headerShown: false }} />

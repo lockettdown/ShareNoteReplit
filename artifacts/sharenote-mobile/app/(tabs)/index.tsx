@@ -86,7 +86,7 @@ export default function DashboardScreen() {
     setSelectedTask(null);
     router.push({
       pathname: '/add-task',
-      params: { editTaskId: task.id },
+      params: { editTaskId: task.id, occurrenceDate: selectedDate },
     });
   }
 

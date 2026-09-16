@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import * as Linking from 'expo-linking';
 import type { Session, User } from '@supabase/supabase-js';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import {
@@ -93,6 +94,7 @@ type AppStateContextType = {
   signInFamily: (familyEmail: string, password: string) => Promise<AuthActionResult>;
   signOut: () => Promise<void>;
   sendPasswordReset: (familyEmail: string) => Promise<AuthActionResult>;
+  updatePassword: (password: string) => Promise<AuthActionResult>;
   selectActiveProfile: (profileId: string) => Promise<AuthActionResult>;
   clearActiveProfile: () => void;
   addMember: (member: Omit<FamilyMember, 'id'>) => void;
@@ -110,6 +112,7 @@ type AppStateContextType = {
   deleteEvent: (id: string) => void;
   addTask: (task: Omit<AppTask, 'id' | 'done'>) => void;
   updateTask: (id: string, task: Omit<AppTask, 'id'>) => void;
+  updateRecurringTaskOccurrence: (id: string, occurrenceDate: string, task: Omit<AppTask, 'id'>) => void;
   deleteTask: (id: string) => void;
   toggleTask: (id: string) => void;
   addGroceryItem: (item: Omit<GroceryItem, 'id' | 'checked'>) => void;
@@ -206,6 +209,16 @@ function createInitialFamilyState(familyName: string, yourName: string): Persist
     tasks: [],
     profileTasks: [],
     groceries: [],
+  };
+}
+
+function getAccountSetupMetadata(user: User) {
+  const familyName = user.user_metadata?.family_name;
+  const displayName = user.user_metadata?.display_name;
+
+  return {
+    familyName: typeof familyName === 'string' ? familyName.trim() : '',
+    displayName: typeof displayName === 'string' ? displayName.trim() : '',
   };
 }
 
@@ -324,6 +337,47 @@ function buildOccurrenceUpdateEvents(original: AppEvent, occurrenceDate: string,
   }
 
   return nextEvents;
+}
+
+function buildOccurrenceUpdateTasks(original: AppTask, occurrenceDate: string, task: Omit<AppTask, 'id'>, timestamp: number): AppTask[] {
+  const info = getOccurrenceInfo(original as AppEvent, occurrenceDate) ?? {
+    index: 0,
+    occurrenceStart: original.date,
+    durationDays: Math.max(0, daysBetween(parseCanonicalDate(original.date), parseCanonicalDate(original.endDate || original.date))),
+  };
+  const replacement: AppTask = {
+    ...task,
+    id: `${original.id}-occurrence-${timestamp}`,
+    repeat: 'None',
+    repeatEndsOn: undefined,
+    repeatOccurrences: undefined,
+  };
+  const nextTasks: AppTask[] = [];
+
+  if (info.index > 0) {
+    const previousOccurrenceStart = getOccurrenceStart(original as AppEvent, info.index - 1);
+    nextTasks.push({
+      ...original,
+      repeatEndsOn: previousOccurrenceStart,
+      repeatOccurrences: original.repeatOccurrences ? info.index : undefined,
+    });
+  }
+
+  nextTasks.push(replacement);
+
+  const nextOccurrenceIndex = info.index + 1;
+  const nextOccurrenceStart = getOccurrenceStart(original as AppEvent, nextOccurrenceIndex);
+  if (occurrenceIsAvailable(original as AppEvent, nextOccurrenceStart, nextOccurrenceIndex)) {
+    nextTasks.push({
+      ...original,
+      date: nextOccurrenceStart,
+      endDate: info.durationDays > 0 ? addDays(nextOccurrenceStart, info.durationDays) : undefined,
+      id: `${original.id}-series-${timestamp}`,
+      repeatOccurrences: original.repeatOccurrences ? original.repeatOccurrences - nextOccurrenceIndex : undefined,
+    });
+  }
+
+  return nextTasks;
 }
 
 async function loadFamilyState(userId: string) {
@@ -612,6 +666,34 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
       return { ok: false, message: 'Supabase did not return a signed-in session.' };
     }
 
+    // Email-confirmed sign-ups do not receive a session during account creation,
+    // so their initial family state cannot be saved until the first sign-in.
+    // Complete that deferred setup from the non-authorizing profile metadata.
+    let storedState: PersistedAppState | null;
+    try {
+      storedState = await loadFamilyState(data.user.id);
+      if (!storedState) {
+        const { familyName: pendingFamilyName, displayName } = getAccountSetupMetadata(data.user);
+        if (pendingFamilyName && displayName) {
+          storedState = await createFamilyState(
+            normalizedFamilyEmail,
+            createInitialFamilyState(pendingFamilyName, displayName),
+          );
+        }
+      }
+    } catch (setupError) {
+      console.warn('Unable to finish the deferred family setup.', setupError);
+      return { ok: false, message: 'Unable to load your family. Please try again.' };
+    }
+
+    if (storedState) {
+      skipNextRemoteLoadRef.current = data.user.id;
+      applyPersistedState(storedState);
+      setHasFamily(true);
+      setCanPersistRemoteState(true);
+      setHasLoadedRemoteState(true);
+    }
+
     applySignedInSession(data.session);
     return { ok: true };
   }
@@ -635,16 +717,40 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     if (!normalizedFamilyEmail) return { ok: false, message: 'Enter your email address.' };
     if (!supabase) return { ok: false, message: 'Supabase is not configured for this app.' };
 
-    const { error } = await supabase.auth.resetPasswordForEmail(normalizedFamilyEmail);
+    const { error } = await supabase.auth.resetPasswordForEmail(normalizedFamilyEmail, {
+      redirectTo: Linking.createURL('/reset-password'),
+    });
     if (error) return { ok: false, message: error.message };
 
     return { ok: true, message: 'Check your email for a reset link.' };
+  }
+
+  async function updatePassword(password: string): Promise<AuthActionResult> {
+    if (!password.trim()) return { ok: false, message: 'Enter a new password.' };
+    if (!supabase || !authSession) {
+      return { ok: false, message: 'This password reset link is invalid or has expired. Request a new one.' };
+    }
+
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) return { ok: false, message: error.message };
+
+    return { ok: true };
   }
 
   async function selectActiveProfile(profileId: string): Promise<AuthActionResult> {
     if (!allMembers.some((member) => member.id === profileId)) {
       setIsActiveProfileAuthorized(false);
       return { ok: false, message: 'This profile does not belong to this family.' };
+    }
+
+    if (supabase) {
+      const { error } = await supabase.rpc('select_family_profile', {
+        requested_profile_id: profileId,
+      });
+      if (error) {
+        setIsActiveProfileAuthorized(false);
+        return { ok: false, message: error.message };
+      }
     }
 
     setActiveProfileId(profileId);
@@ -806,6 +912,19 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
     setProfileTasks((prev) => prev.map((item) => (item.id === id ? { ...task, id } : item)));
   }
 
+  function updateRecurringTaskOccurrence(id: string, occurrenceDate: string, task: Omit<AppTask, 'id'>) {
+    const timestamp = Date.now();
+    const updateCollection = (items: AppTask[]) => {
+      const original = items.find((item) => item.id === id);
+      if (!original) return items;
+      const replacementTasks = buildOccurrenceUpdateTasks(original, occurrenceDate, task, timestamp);
+      return items.flatMap((item) => (item.id === id ? replacementTasks : [item]));
+    };
+
+    setTasks(updateCollection);
+    setProfileTasks(updateCollection);
+  }
+
   function deleteTask(id: string) {
     setTasks((prev) => prev.filter((item) => item.id !== id));
     setProfileTasks((prev) => prev.filter((item) => item.id !== id));
@@ -834,7 +953,7 @@ export function AppStateProvider({ children }: { children: React.ReactNode }) {
         authUser, isAuthLoading, isFamilyStateLoading: Boolean(familyEmail && isSupabaseConfigured && !hasLoadedRemoteState),
         hasFamily, familyEmail, familyName, activeProfileId, activeProfile, canManageFamily,
         members, dashboardMembers, events, dashboardEvents, tasks, profileTasks, groceries,
-        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, updateRecurringEventOccurrence, deleteEvent, addTask, updateTask, deleteTask, toggleTask,
+        setFamilyName, setMembers, signInFamily, signOut, sendPasswordReset, updatePassword, selectActiveProfile, clearActiveProfile, addMember, updateMember, deleteMember, createFamily, addEvent, updateEvent, updateRecurringEventOccurrence, deleteEvent, addTask, updateTask, updateRecurringTaskOccurrence, deleteTask, toggleTask,
         addGroceryItem, toggleGroceryItem, removeGroceryItem,
       }}
     >

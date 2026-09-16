@@ -139,9 +139,9 @@ export default function AddEventScreen() {
     const hasRepeatEndDate = repeatEndsOn.trim().length > 0;
     const hasRepeatOccurrences = trimmedRepeatOccurrences.length > 0;
 
-    if (repeat === 'Weekly') {
+    if (repeat !== 'None') {
       if (!hasRepeatEndDate && !hasRepeatOccurrences) {
-        setWeeklyRepeatError('Set an end date or number of occurrences for weekly repeats.');
+        setWeeklyRepeatError('Set an end date or number of occurrences for this repeating event.');
         return;
       }
       if (hasRepeatOccurrences && (!/^\d+$/.test(trimmedRepeatOccurrences) || !Number.isFinite(parsedRepeatOccurrences) || parsedRepeatOccurrences < 1)) {
@@ -158,8 +158,8 @@ export default function AddEventScreen() {
       date: normalizePickedDate(date),
       endDate: endDate.trim() ? normalizePickedDate(endDate) : undefined,
       repeat,
-      repeatEndsOn: repeat === 'Weekly' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
-      repeatOccurrences: repeat === 'Weekly' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
+      repeatEndsOn: repeat !== 'None' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
+      repeatOccurrences: repeat !== 'None' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
       time: [starts.trim(), ends.trim()].filter(Boolean).join(' - ') || 'No time set',
       personId: primaryPersonId,
       personIds: selectedPersonIds,
@@ -311,8 +311,10 @@ export default function AddEventScreen() {
               setWeeklyRepeatError('');
             }}
           />
-          {repeat === 'Weekly' ? (
+          {repeat !== 'None' ? (
             <WeeklyRepeatEndControls
+              repeat={repeat}
+              startsOn={date}
               repeatEndsOn={repeatEndsOn}
               onRepeatEndsOnChange={(value) => {
                 setRepeatEndsOn(value);

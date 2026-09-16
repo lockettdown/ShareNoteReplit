@@ -10,8 +10,11 @@ import {
   View,
 } from 'react-native';
 import { useColors } from '@/hooks/useColors';
+import { getTodayCanonicalDate } from '@/utils/schedule';
 
 type WeeklyRepeatEndControlsProps = {
+  repeat: 'Daily' | 'Weekly' | 'Monthly' | 'Yearly';
+  startsOn: string;
   repeatEndsOn: string;
   onRepeatEndsOnChange: (value: string) => void;
   repeatOccurrences: string;
@@ -37,7 +40,10 @@ const MONTHS = [
 
 function parseDisplayDate(value: string) {
   const match = value.match(/^(\d{2})\/(\d{2})\/(\d{4})$/);
-  if (!match) return new Date(2025, 7, 12);
+  if (!match) {
+    const [year, month, day] = getTodayCanonicalDate().split('-').map(Number);
+    return new Date(year, month - 1, day);
+  }
   return new Date(Number(match[3]), Number(match[1]) - 1, Number(match[2]));
 }
 
@@ -52,6 +58,8 @@ export function canonicalToPickedDate(value: string) {
 }
 
 export function WeeklyRepeatEndControls({
+  repeat,
+  startsOn,
   repeatEndsOn,
   onRepeatEndsOnChange,
   repeatOccurrences,
@@ -59,7 +67,8 @@ export function WeeklyRepeatEndControls({
   error,
 }: WeeklyRepeatEndControlsProps) {
   const colors = useColors();
-  const initialMonth = parseDisplayDate(repeatEndsOn);
+  const repeatLabel = repeat.toLowerCase();
+  const initialMonth = parseDisplayDate(repeatEndsOn || startsOn);
   const [monthDate, setMonthDate] = useState(new Date(initialMonth.getFullYear(), initialMonth.getMonth(), 1));
   const [calendarOpen, setCalendarOpen] = useState(false);
 
@@ -75,8 +84,9 @@ export function WeeklyRepeatEndControls({
   }, [monthDate]);
 
   function openCalendar() {
-    if (repeatEndsOn) {
-      const selectedDate = parseDisplayDate(repeatEndsOn);
+    const selectedValue = repeatEndsOn || startsOn;
+    if (selectedValue) {
+      const selectedDate = parseDisplayDate(selectedValue);
       setMonthDate(new Date(selectedDate.getFullYear(), selectedDate.getMonth(), 1));
     }
     setCalendarOpen(true);
@@ -96,17 +106,31 @@ export function WeeklyRepeatEndControls({
   return (
     <View style={[styles.container, { borderColor: colors.border, backgroundColor: colors.cardSoft }]}>
       <Text style={[styles.title, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
-        Weekly Repeat Ends
+        {repeat} Repeat Ends
       </Text>
       <Text style={[styles.helper, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
-        Choose an end date or enter the number of weekly occurrences.
+        Choose an end date or enter the number of {repeatLabel} occurrences.
       </Text>
 
       <View style={styles.rowFields}>
         <View style={[styles.fieldGroup, { flex: 1 }]}>
-          <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
-            End Date
-          </Text>
+          <View style={styles.labelRow}>
+            <Text style={[styles.label, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+              End Date
+            </Text>
+            {repeatEndsOn ? (
+              <Pressable
+                accessibilityLabel="Clear repeat end date"
+                onPress={() => {
+                  Haptics.selectionAsync();
+                  onRepeatEndsOnChange('');
+                }}
+                hitSlop={8}
+              >
+                <Text style={[styles.clearButton, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Clear</Text>
+              </Pressable>
+            ) : null}
+          </View>
           <Pressable
             onPress={openCalendar}
             style={[styles.inputContainer, { borderColor: colors.border, backgroundColor: colors.card }]}
@@ -235,7 +259,9 @@ const styles = StyleSheet.create({
   helper: { fontSize: 13, lineHeight: 18 },
   rowFields: { flexDirection: 'row', gap: 12 },
   fieldGroup: { gap: 8 },
+  labelRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   label: { fontSize: 13 },
+  clearButton: { fontSize: 12 },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',

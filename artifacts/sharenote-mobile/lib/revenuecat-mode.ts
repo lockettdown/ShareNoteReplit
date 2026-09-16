@@ -1,3 +1,17 @@
-export function isRevenueCatBypassEnabled(isDevelopment: boolean, flag: string | undefined) {
-  return isDevelopment && flag?.trim().toLowerCase() === 'true';
+type RevenueCatBypassOptions = {
+  isDevelopment: boolean;
+  flag: string | undefined;
+  platform: string;
+  executionEnvironment?: string;
+};
+
+export function isRevenueCatBypassEnabled({
+  isDevelopment,
+  flag,
+  platform,
+  executionEnvironment,
+}: RevenueCatBypassOptions) {
+  if (flag?.trim().toLowerCase() !== 'true') return false;
+
+  return isDevelopment || platform === 'web' || executionEnvironment === 'storeClient';
 }

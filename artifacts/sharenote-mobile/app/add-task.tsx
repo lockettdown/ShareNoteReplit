@@ -1,5 +1,6 @@
 import {
   Platform,
+  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -15,12 +16,13 @@ import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppState } from '@/context/AppState';
-import type { RepeatOption } from '@/context/AppState';
+import type { AppTask, RepeatOption } from '@/context/AppState';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { normalizePickedDate, SchedulePickerFields } from '@/components/SchedulePickerFields';
 import { FormDropdownField } from '@/components/FormDropdownField';
 import { WeeklyRepeatEndControls } from '@/components/WeeklyRepeatEndControls';
 import { PermissionNotice } from '@/components/PermissionNotice';
+import { parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
 const REMINDER_OPTIONS = ['At time of event', '5 minutes before', '10 minutes before', '15 minutes before', '30 minutes before', '1 hour before', '1 day before', '1 week before'];
 const SECOND_REMINDER_OPTIONS = ['None', ...REMINDER_OPTIONS];
@@ -38,14 +40,35 @@ function splitTaskTime(value: string) {
   return [parts[0] ?? '', parts[1] ?? ''] as const;
 }
 
+function daysBetweenCanonical(start: string, end: string) {
+  const startDate = parseCanonicalDate(start);
+  const endDate = parseCanonicalDate(end);
+  return Math.round((Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate()) - Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate())) / 86400000);
+}
+
+function addDaysCanonical(value: string, days: number) {
+  const date = parseCanonicalDate(value);
+  date.setDate(date.getDate() + days);
+  return toCanonicalDate(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+type TaskDraft = Omit<AppTask, 'id'>;
+
 export default function AddTaskScreen() {
   const router = useRouter();
-  const { personId: initialPersonId, editTaskId } = useLocalSearchParams<{ personId?: string; editTaskId?: string }>();
+  const { personId: initialPersonId, editTaskId, occurrenceDate } = useLocalSearchParams<{ personId?: string; editTaskId?: string; occurrenceDate?: string }>();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { members, dashboardMembers, tasks, profileTasks, canManageFamily, addTask, updateTask } = useAppState();
+  const { members, dashboardMembers, tasks, profileTasks, canManageFamily, addTask, updateTask, updateRecurringTaskOccurrence } = useAppState();
   const assignableMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const existingTask = [...tasks, ...profileTasks].find((task) => task.id === editTaskId);
+  const isEditingRecurringTask = Boolean(existingTask?.repeat && existingTask.repeat !== 'None');
+  const initialOccurrenceDate = isEditingRecurringTask && occurrenceDate ? occurrenceDate : existingTask?.date;
+  const initialDurationDays = existingTask?.endDate ? daysBetweenCanonical(existingTask.date, existingTask.endDate) : 0;
+  const initialDate = existingTask && initialOccurrenceDate ? initialOccurrenceDate : existingTask?.date;
+  const initialEndDate = existingTask?.endDate && initialOccurrenceDate
+    ? addDaysCanonical(initialOccurrenceDate, initialDurationDays)
+    : existingTask?.endDate;
   const [initialStartTime, initialEndTime] = splitTaskTime(existingTask?.time ?? '');
   const initialSelectedPersonIds = existingTask?.personIds?.length
     ? existingTask.personIds
@@ -58,8 +81,8 @@ export default function AddTaskScreen() {
     assignableMembers[0].id;
 
   const [title, setTitle] = useState(existingTask?.title ?? '');
-  const [date, setDate] = useState(existingTask ? canonicalToPickedDate(existingTask.date) : '');
-  const [endDate, setEndDate] = useState(existingTask?.endDate ? canonicalToPickedDate(existingTask.endDate) : '');
+  const [date, setDate] = useState(initialDate ? canonicalToPickedDate(initialDate) : '');
+  const [endDate, setEndDate] = useState(initialEndDate ? canonicalToPickedDate(initialEndDate) : '');
   const [starts, setStarts] = useState(initialStartTime);
   const [ends, setEnds] = useState(initialEndTime);
   const [details, setDetails] = useState(existingTask?.details ?? '');
@@ -71,11 +94,36 @@ export default function AddTaskScreen() {
   const [repeatOccurrences, setRepeatOccurrences] = useState(existingTask?.repeatOccurrences ? String(existingTask.repeatOccurrences) : '');
   const [weeklyRepeatError, setWeeklyRepeatError] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'reminder' | 'secondReminder' | 'repeat' | null>(null);
+  const [pendingTask, setPendingTask] = useState<TaskDraft | null>(null);
+  const [showRecurringScopeChoice, setShowRecurringScopeChoice] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   function closeScreen() {
+    router.replace('/(tabs)/calendar');
+  }
+
+  function getSeriesScopedTask(nextTask: TaskDraft) {
+    if (!existingTask || !isEditingRecurringTask || !initialOccurrenceDate || initialOccurrenceDate === existingTask.date) return nextTask;
+    return {
+      ...nextTask,
+      date: nextTask.date === initialOccurrenceDate ? existingTask.date : nextTask.date,
+      endDate: nextTask.endDate === initialEndDate ? existingTask.endDate : nextTask.endDate,
+    };
+  }
+
+  function commitTask(nextTask: TaskDraft, scope: 'this' | 'series' = 'series') {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (existingTask) {
+      if (scope === 'this') {
+        updateRecurringTaskOccurrence(existingTask.id, initialOccurrenceDate ?? existingTask.date, nextTask);
+      } else {
+        updateTask(existingTask.id, getSeriesScopedTask(nextTask));
+      }
+    } else {
+      addTask(nextTask);
+    }
     router.replace('/(tabs)/calendar');
   }
 
@@ -86,9 +134,9 @@ export default function AddTaskScreen() {
     const hasRepeatEndDate = repeatEndsOn.trim().length > 0;
     const hasRepeatOccurrences = trimmedRepeatOccurrences.length > 0;
 
-    if (repeat === 'Weekly') {
+    if (repeat !== 'None') {
       if (!hasRepeatEndDate && !hasRepeatOccurrences) {
-        setWeeklyRepeatError('Set an end date or number of occurrences for weekly repeats.');
+        setWeeklyRepeatError('Set an end date or number of occurrences for this repeating task.');
         return;
       }
       if (hasRepeatOccurrences && (!/^\d+$/.test(trimmedRepeatOccurrences) || !Number.isFinite(parsedRepeatOccurrences) || parsedRepeatOccurrences < 1)) {
@@ -100,14 +148,13 @@ export default function AddTaskScreen() {
     const selectedPersonIds = personIds.length ? personIds : [initialSelectedPersonId];
     const primaryPersonId = selectedPersonIds[0];
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const nextTask = {
       title: title.trim(),
       date: normalizePickedDate(date),
       endDate: endDate.trim() ? normalizePickedDate(endDate) : undefined,
       repeat,
-      repeatEndsOn: repeat === 'Weekly' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
-      repeatOccurrences: repeat === 'Weekly' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
+      repeatEndsOn: repeat !== 'None' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
+      repeatOccurrences: repeat !== 'None' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
       time: [starts.trim(), ends.trim()].filter(Boolean).join(' - ') || 'No time set',
       location: existingTask?.location ?? 'Home',
       personId: primaryPersonId,
@@ -118,12 +165,13 @@ export default function AddTaskScreen() {
       secondReminder,
     };
 
-    if (existingTask) {
-      updateTask(existingTask.id, { ...nextTask, done: existingTask.done });
-    } else {
-      addTask(nextTask);
+    const nextTaskWithDone = { ...nextTask, done: existingTask?.done ?? false };
+    if (existingTask && isEditingRecurringTask) {
+      setPendingTask(nextTaskWithDone);
+      setShowRecurringScopeChoice(true);
+      return;
     }
-    router.replace('/(tabs)/calendar');
+    commitTask(nextTaskWithDone);
   }
 
   function toggleAssignedPerson(nextPersonId: string) {
@@ -259,8 +307,10 @@ export default function AddTaskScreen() {
               setWeeklyRepeatError('');
             }}
           />
-          {repeat === 'Weekly' ? (
+          {repeat !== 'None' ? (
             <WeeklyRepeatEndControls
+              repeat={repeat}
+              startsOn={date}
               repeatEndsOn={repeatEndsOn}
               onRepeatEndsOnChange={(value) => {
                 setRepeatEndsOn(value);
@@ -307,6 +357,55 @@ export default function AddTaskScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <Modal
+        visible={showRecurringScopeChoice}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRecurringScopeChoice(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRecurringScopeChoice(false)} />
+          <View style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: bottomPad + 24 }]}>
+            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Apply Changes</Text>
+              <Pressable onPress={() => setShowRecurringScopeChoice(false)} hitSlop={12}>
+                <Feather name="x" size={24} color={colors.foreground} />
+              </Pressable>
+            </View>
+            <Text style={[styles.modalDescription, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>This task repeats. Choose how much of the series should change.</Text>
+
+            <Pressable style={[styles.modalOption, { borderColor: colors.border }]} onPress={() => {
+              if (!pendingTask) return;
+              setShowRecurringScopeChoice(false);
+              commitTask(pendingTask, 'this');
+            }}>
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="check-square" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>This task only</Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Update only this occurrence. The rest of the series stays unchanged.</Text>
+              </View>
+            </Pressable>
+
+            <Pressable style={[styles.modalOption, { borderColor: colors.border }]} onPress={() => {
+              if (!pendingTask) return;
+              setShowRecurringScopeChoice(false);
+              commitTask(pendingTask, 'series');
+            }}>
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="repeat" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>Entire series</Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>Update this task and all occurrences in the recurring series.</Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -329,5 +428,16 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 24, paddingTop: 16 },
   saveButton: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   saveButtonText: { fontSize: 16 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, gap: 16 },
+  modalDragHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { fontSize: 24 },
+  modalDescription: { fontSize: 15, lineHeight: 22 },
+  modalOption: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, borderWidth: 1, gap: 16 },
+  modalOptionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  modalOptionTextWrapper: { flex: 1, gap: 4 },
+  modalOptionTitle: { fontSize: 16 },
+  modalOptionSubtitle: { fontSize: 13, lineHeight: 18 },
   restrictedContent: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
 });

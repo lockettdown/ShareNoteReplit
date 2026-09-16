@@ -186,7 +186,7 @@ export default function CalendarScreen() {
     setSelectedTask(null);
     router.push({
       pathname: '/add-task',
-      params: { editTaskId: task.id },
+      params: { editTaskId: task.id, occurrenceDate: selectedDate },
     });
   }
 

@@ -144,7 +144,7 @@ begin
         jsonb_typeof(member -> 'id') as id_type,
         jsonb_typeof(member -> 'role') as role_type
       from jsonb_array_elements(
-        candidate_state -> 'members' || candidate_state -> 'dashboardMembers'
+        (candidate_state -> 'members') || (candidate_state -> 'dashboardMembers')
       ) member
     )
     select
