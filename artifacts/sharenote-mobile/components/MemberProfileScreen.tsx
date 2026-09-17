@@ -26,6 +26,26 @@ function initialsFromName(name: string) {
   return initials || 'ME';
 }
 
+function formatUpcomingEventDate(event: AppEvent) {
+  const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  if (!event.endDate || event.endDate === event.date) return formatDate(event.date);
+  return `${formatDate(event.date)} – ${formatDate(event.endDate)}`;
+}
+
+function formatUpcomingTaskDate(task: AppTask) {
+  const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  if (!task.endDate || task.endDate === task.date) return formatDate(task.date);
+  return `${formatDate(task.date)} – ${formatDate(task.endDate)}`;
+}
+
 export default function MemberProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -329,6 +349,12 @@ export default function MemberProfileScreen() {
                       </Text>
                     </View>
                   </View>
+                  <Text
+                    style={[styles.eventDate, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}
+                    numberOfLines={1}
+                  >
+                    {formatUpcomingTaskDate(task)}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -368,6 +394,12 @@ export default function MemberProfileScreen() {
                       </Text>
                     </View>
                   </View>
+                  <Text
+                    style={[styles.eventDate, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}
+                    numberOfLines={1}
+                  >
+                    {formatUpcomingEventDate(event)}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -553,6 +585,7 @@ const styles = StyleSheet.create({
   disabledControl: { opacity: 0.45 },
   eventIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   taskContent: { flex: 1, gap: 4 },
+  eventDate: { fontSize: 14, maxWidth: 96, textAlign: 'right' },
   taskTitle: { fontSize: 16 },
   taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   taskMetaText: { fontSize: 13 },
