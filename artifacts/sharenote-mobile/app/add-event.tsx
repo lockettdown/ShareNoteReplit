@@ -1,4 +1,5 @@
 import {
+  Modal,
   Platform,
   Pressable,
   ScrollView,
@@ -15,12 +16,13 @@ import { useState } from 'react';
 import * as Haptics from 'expo-haptics';
 import { KeyboardAwareScrollViewCompat } from '@/components/KeyboardAwareScrollViewCompat';
 import { useAppState } from '@/context/AppState';
-import type { RepeatOption } from '@/context/AppState';
+import type { AppEvent, RepeatOption } from '@/context/AppState';
 import { MemberAvatar } from '@/components/MemberAvatar';
 import { normalizePickedDate, SchedulePickerFields } from '@/components/SchedulePickerFields';
 import { FormDropdownField } from '@/components/FormDropdownField';
 import { WeeklyRepeatEndControls } from '@/components/WeeklyRepeatEndControls';
 import { PermissionNotice } from '@/components/PermissionNotice';
+import { parseCanonicalDate, toCanonicalDate } from '@/utils/schedule';
 
 const REMINDER_OPTIONS = ['At time of event', '5 minutes before', '10 minutes before', '15 minutes before', '30 minutes before', '1 hour before', '1 day before', '1 week before'];
 const SECOND_REMINDER_OPTIONS = ['None', ...REMINDER_OPTIONS];
@@ -32,21 +34,44 @@ function canonicalToPickedDate(value: string) {
   return `${match[2]}/${match[3]}/${match[1]}`;
 }
 
+function daysBetweenCanonical(start: string, end: string) {
+  const startDate = parseCanonicalDate(start);
+  const endDate = parseCanonicalDate(end);
+  const startUtc = Date.UTC(startDate.getFullYear(), startDate.getMonth(), startDate.getDate());
+  const endUtc = Date.UTC(endDate.getFullYear(), endDate.getMonth(), endDate.getDate());
+  return Math.round((endUtc - startUtc) / 86400000);
+}
+
+function addDaysCanonical(value: string, days: number) {
+  const date = parseCanonicalDate(value);
+  date.setDate(date.getDate() + days);
+  return toCanonicalDate(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
 function splitEventTime(value: string) {
   if (!value || value === 'No time set') return ['', ''];
   const parts = value.split(' - ');
   return [parts[0] ?? '', parts[1] ?? ''] as const;
 }
 
+type EventDraft = Omit<AppEvent, 'id'>;
+
 export default function AddEventScreen() {
   const router = useRouter();
-  const { personId: initialPersonId, editEventId } = useLocalSearchParams<{ personId?: string; editEventId?: string }>();
+  const { personId: initialPersonId, editEventId, occurrenceDate } = useLocalSearchParams<{ personId?: string; editEventId?: string; occurrenceDate?: string }>();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { members, dashboardMembers, events, dashboardEvents, canManageFamily, addEvent, updateEvent } = useAppState();
+  const { members, dashboardMembers, events, dashboardEvents, canManageFamily, addEvent, updateEvent, updateRecurringEventOccurrence } = useAppState();
   const assignableMembers = [...members, ...dashboardMembers.filter((member) => !members.some((item) => item.id === member.id))];
   const existingEvent = [...events, ...dashboardEvents].find((event) => event.id === editEventId);
   const [initialStartTime, initialEndTime] = splitEventTime(existingEvent?.time ?? '');
+  const isEditingRecurringEvent = Boolean(existingEvent?.repeat && existingEvent.repeat !== 'None');
+  const initialOccurrenceDate = isEditingRecurringEvent && occurrenceDate ? occurrenceDate : existingEvent?.date;
+  const initialDurationDays = existingEvent?.endDate ? daysBetweenCanonical(existingEvent.date, existingEvent.endDate) : 0;
+  const initialDate = existingEvent && initialOccurrenceDate ? initialOccurrenceDate : existingEvent?.date;
+  const initialEndDate = existingEvent?.endDate && initialOccurrenceDate
+    ? addDaysCanonical(initialOccurrenceDate, initialDurationDays)
+    : existingEvent?.endDate;
   const initialSelectedPersonIds = existingEvent?.personIds?.length
     ? existingEvent.personIds
     : [
@@ -58,24 +83,52 @@ export default function AddEventScreen() {
     assignableMembers[0].id;
 
   const [title, setTitle] = useState(existingEvent?.title ?? '');
-  const [date, setDate] = useState(existingEvent ? canonicalToPickedDate(existingEvent.date) : '');
-  const [endDate, setEndDate] = useState(existingEvent?.endDate ? canonicalToPickedDate(existingEvent.endDate) : '');
+  const [date, setDate] = useState(initialDate ? canonicalToPickedDate(initialDate) : '');
+  const [endDate, setEndDate] = useState(initialEndDate ? canonicalToPickedDate(initialEndDate) : '');
   const [starts, setStarts] = useState(initialStartTime);
   const [ends, setEnds] = useState(initialEndTime);
   const [details, setDetails] = useState(existingEvent?.details ?? '');
   const [personIds, setPersonIds] = useState(initialSelectedPersonIds);
-  const [reminder, setReminder] = useState(REMINDER_OPTIONS[0]);
-  const [secondReminder, setSecondReminder] = useState(REMINDER_OPTIONS[0]);
+  const [reminder, setReminder] = useState(existingEvent?.reminder ?? REMINDER_OPTIONS[0]);
+  const [secondReminder, setSecondReminder] = useState(existingEvent?.secondReminder ?? REMINDER_OPTIONS[0]);
   const [repeat, setRepeat] = useState(existingEvent?.repeat ?? REPEAT_OPTIONS[0]);
   const [repeatEndsOn, setRepeatEndsOn] = useState(existingEvent?.repeatEndsOn ? canonicalToPickedDate(existingEvent.repeatEndsOn) : '');
   const [repeatOccurrences, setRepeatOccurrences] = useState(existingEvent?.repeatOccurrences ? String(existingEvent.repeatOccurrences) : '');
   const [weeklyRepeatError, setWeeklyRepeatError] = useState('');
   const [openDropdown, setOpenDropdown] = useState<'reminder' | 'secondReminder' | 'repeat' | null>(null);
+  const [pendingEvent, setPendingEvent] = useState<EventDraft | null>(null);
+  const [showRecurringScopeChoice, setShowRecurringScopeChoice] = useState(false);
 
   const topPad = Platform.OS === 'web' ? 67 : insets.top;
   const bottomPad = Platform.OS === 'web' ? 34 : insets.bottom;
 
   function closeScreen() {
+    router.replace('/(tabs)/calendar');
+  }
+
+  function getSeriesScopedEvent(nextEvent: EventDraft) {
+    if (!existingEvent || !isEditingRecurringEvent || !initialOccurrenceDate || initialOccurrenceDate === existingEvent.date) {
+      return nextEvent;
+    }
+
+    return {
+      ...nextEvent,
+      date: nextEvent.date === initialOccurrenceDate ? existingEvent.date : nextEvent.date,
+      endDate: nextEvent.endDate === initialEndDate ? existingEvent.endDate : nextEvent.endDate,
+    };
+  }
+
+  function commitEvent(nextEvent: EventDraft, scope: 'this' | 'series' = 'series') {
+    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+    if (existingEvent) {
+      if (scope === 'this') {
+        updateRecurringEventOccurrence(existingEvent.id, initialOccurrenceDate ?? existingEvent.date, nextEvent);
+      } else {
+        updateEvent(existingEvent.id, getSeriesScopedEvent(nextEvent));
+      }
+    } else {
+      addEvent(nextEvent);
+    }
     router.replace('/(tabs)/calendar');
   }
 
@@ -86,9 +139,9 @@ export default function AddEventScreen() {
     const hasRepeatEndDate = repeatEndsOn.trim().length > 0;
     const hasRepeatOccurrences = trimmedRepeatOccurrences.length > 0;
 
-    if (repeat === 'Weekly') {
+    if (repeat !== 'None') {
       if (!hasRepeatEndDate && !hasRepeatOccurrences) {
-        setWeeklyRepeatError('Set an end date or number of occurrences for weekly repeats.');
+        setWeeklyRepeatError('Set an end date or number of occurrences for this repeating event.');
         return;
       }
       if (hasRepeatOccurrences && (!/^\d+$/.test(trimmedRepeatOccurrences) || !Number.isFinite(parsedRepeatOccurrences) || parsedRepeatOccurrences < 1)) {
@@ -100,27 +153,29 @@ export default function AddEventScreen() {
     const selectedPersonIds = personIds.length ? personIds : [initialSelectedPersonId];
     const primaryPersonId = selectedPersonIds[0];
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     const nextEvent = {
       title: title.trim(),
       date: normalizePickedDate(date),
       endDate: endDate.trim() ? normalizePickedDate(endDate) : undefined,
       repeat,
-      repeatEndsOn: repeat === 'Weekly' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
-      repeatOccurrences: repeat === 'Weekly' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
+      repeatEndsOn: repeat !== 'None' && hasRepeatEndDate ? normalizePickedDate(repeatEndsOn) : undefined,
+      repeatOccurrences: repeat !== 'None' && hasRepeatOccurrences ? parsedRepeatOccurrences : undefined,
       time: [starts.trim(), ends.trim()].filter(Boolean).join(' - ') || 'No time set',
       personId: primaryPersonId,
       personIds: selectedPersonIds,
       color: assignableMembers.find(m => m.id === primaryPersonId)?.color || colors.primary,
       details: details.trim(),
+      reminder,
+      secondReminder,
     };
 
-    if (existingEvent) {
-      updateEvent(existingEvent.id, nextEvent);
-    } else {
-      addEvent(nextEvent);
+    if (existingEvent && isEditingRecurringEvent) {
+      setPendingEvent(nextEvent);
+      setShowRecurringScopeChoice(true);
+      return;
     }
-    router.replace('/(tabs)/calendar');
+
+    commitEvent(nextEvent);
   }
 
   function toggleAssignedPerson(nextPersonId: string) {
@@ -256,8 +311,10 @@ export default function AddEventScreen() {
               setWeeklyRepeatError('');
             }}
           />
-          {repeat === 'Weekly' ? (
+          {repeat !== 'None' ? (
             <WeeklyRepeatEndControls
+              repeat={repeat}
+              startsOn={date}
               repeatEndsOn={repeatEndsOn}
               onRepeatEndsOnChange={(value) => {
                 setRepeatEndsOn(value);
@@ -304,6 +361,73 @@ export default function AddEventScreen() {
           </Text>
         </Pressable>
       </View>
+
+      <Modal
+        visible={showRecurringScopeChoice}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowRecurringScopeChoice(false)}
+      >
+        <View style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}>
+          <Pressable style={StyleSheet.absoluteFill} onPress={() => setShowRecurringScopeChoice(false)} />
+          <View style={[styles.modalContent, { backgroundColor: colors.card, paddingBottom: bottomPad + 24 }]}>
+            <View style={[styles.modalDragHandle, { backgroundColor: colors.border }]} />
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>
+                Apply Changes
+              </Text>
+              <Pressable onPress={() => setShowRecurringScopeChoice(false)} hitSlop={12}>
+                <Feather name="x" size={24} color={colors.foreground} />
+              </Pressable>
+            </View>
+            <Text style={[styles.modalDescription, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              This event repeats. Choose how much of the series should change.
+            </Text>
+
+            <Pressable
+              style={[styles.modalOption, { borderColor: colors.border }]}
+              onPress={() => {
+                if (!pendingEvent) return;
+                setShowRecurringScopeChoice(false);
+                commitEvent(pendingEvent, 'this');
+              }}
+            >
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="calendar" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                  This event only
+                </Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  Update only this occurrence. The rest of the series stays unchanged.
+                </Text>
+              </View>
+            </Pressable>
+
+            <Pressable
+              style={[styles.modalOption, { borderColor: colors.border }]}
+              onPress={() => {
+                if (!pendingEvent) return;
+                setShowRecurringScopeChoice(false);
+                commitEvent(pendingEvent, 'series');
+              }}
+            >
+              <View style={[styles.modalOptionIcon, { backgroundColor: colors.secondary }]}>
+                <Feather name="repeat" size={20} color={colors.primary} />
+              </View>
+              <View style={styles.modalOptionTextWrapper}>
+                <Text style={[styles.modalOptionTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>
+                  Entire series
+                </Text>
+                <Text style={[styles.modalOptionSubtitle, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+                  Update this event and all occurrences in the recurring series.
+                </Text>
+              </View>
+            </Pressable>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -326,5 +450,16 @@ const styles = StyleSheet.create({
   footer: { paddingHorizontal: 24, paddingTop: 16 },
   saveButton: { height: 56, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   saveButtonText: { fontSize: 16 },
+  modalOverlay: { flex: 1, justifyContent: 'flex-end' },
+  modalContent: { borderTopLeftRadius: 32, borderTopRightRadius: 32, padding: 24, gap: 16 },
+  modalDragHandle: { width: 40, height: 4, borderRadius: 2, alignSelf: 'center', marginBottom: 8 },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  modalTitle: { fontSize: 24 },
+  modalDescription: { fontSize: 15, lineHeight: 22 },
+  modalOption: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 20, borderWidth: 1, gap: 16 },
+  modalOptionIcon: { width: 48, height: 48, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  modalOptionTextWrapper: { flex: 1, gap: 4 },
+  modalOptionTitle: { fontSize: 16 },
+  modalOptionSubtitle: { fontSize: 13, lineHeight: 18 },
   restrictedContent: { flex: 1, justifyContent: 'center', paddingHorizontal: 24 },
 });

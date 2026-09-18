@@ -1,1 +1,5 @@
 - [expo-google-fonts useFonts conflict](expo-google-fonts-useFonts.md) — importing useFonts from two @expo-google-fonts packages causes a React null crash; always import useFonts from expo-font directly.
+- [Replit Expo managed session](replit-expo-managed-session.md) — Expo Go 57 requires the Replit session secret to be installed into Expo CLI state before Metro starts.
+- [GitHub binary uploads](github-binary-uploads.md) — for large or binary files, read bytes directly in the integration call; shell-captured base64 can silently alter uploaded blobs.
+- [RevenueCat product branding](revenuecat-product-branding.md) — product display names and SDK descriptions can come from different metadata sources; guard against stale store copy.
+- [RevenueCat trial clock](revenuecat-trial-clock.md) — free trials use a forced server timestamp plus monotonic time; cached data and device wall clocks cannot grant access.

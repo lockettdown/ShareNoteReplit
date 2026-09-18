@@ -52,23 +52,41 @@ function selectedIsInsideOccurrence(selected: Date, occurrenceStart: Date, durat
   return offset >= 0 && offset <= durationDays;
 }
 
-function occursMonthly(start: Date, selected: Date, durationDays: number) {
+function occursEveryDays(start: Date, selected: Date, durationDays: number, intervalDays: number, occurrences?: number) {
+  const dayDelta = daysBetween(start, selected);
+  const firstPossibleIndex = Math.max(0, Math.ceil((dayDelta - durationDays) / intervalDays));
+  const lastPossibleIndex = Math.floor(dayDelta / intervalDays);
+
+  for (let index = firstPossibleIndex; index <= lastPossibleIndex; index += 1) {
+    if (occurrences && index >= occurrences) return false;
+    const occurrenceStart = new Date(start);
+    occurrenceStart.setDate(occurrenceStart.getDate() + index * intervalDays);
+    if (selectedIsInsideOccurrence(selected, occurrenceStart, durationDays)) return true;
+  }
+  return false;
+}
+
+function occursMonthly(start: Date, selected: Date, durationDays: number, occurrences?: number) {
   const monthDelta =
     (selected.getFullYear() - start.getFullYear()) * 12 +
     selected.getMonth() -
     start.getMonth();
   if (monthDelta < 0) return false;
-  return [monthDelta - 1, monthDelta].some((delta) => (
-    delta >= 0 && selectedIsInsideOccurrence(selected, addMonthsClamped(start, delta), durationDays)
-  ));
+  const lastPossibleIndex = occurrences ? Math.min(monthDelta, occurrences - 1) : monthDelta;
+  for (let index = 0; index <= lastPossibleIndex; index += 1) {
+    if (selectedIsInsideOccurrence(selected, addMonthsClamped(start, index), durationDays)) return true;
+  }
+  return false;
 }
 
-function occursYearly(start: Date, selected: Date, durationDays: number) {
+function occursYearly(start: Date, selected: Date, durationDays: number, occurrences?: number) {
   const yearDelta = selected.getFullYear() - start.getFullYear();
   if (yearDelta < 0) return false;
-  return [yearDelta - 1, yearDelta].some((delta) => (
-    delta >= 0 && selectedIsInsideOccurrence(selected, addYearsClamped(start, delta), durationDays)
-  ));
+  const lastPossibleIndex = occurrences ? Math.min(yearDelta, occurrences - 1) : yearDelta;
+  for (let index = 0; index <= lastPossibleIndex; index += 1) {
+    if (selectedIsInsideOccurrence(selected, addYearsClamped(start, index), durationDays)) return true;
+  }
+  return false;
 }
 
 export function itemOccursOn(item: ScheduleItem, selectedDate: string) {
@@ -82,13 +100,9 @@ export function itemOccursOn(item: ScheduleItem, selectedDate: string) {
   if (repeat === 'None') return dayDelta >= 0 && dayDelta <= durationDays;
   if (dayDelta < 0) return false;
   if (item.repeatEndsOn && daysBetween(parseCanonicalDate(item.repeatEndsOn), selected) > 0) return false;
-  if (repeat === 'Daily') return true;
-  if (repeat === 'Weekly') {
-    const occurrenceIndex = Math.floor(dayDelta / 7);
-    if (item.repeatOccurrences && occurrenceIndex >= item.repeatOccurrences) return false;
-    return dayDelta % 7 <= durationDays;
-  }
-  if (repeat === 'Monthly') return occursMonthly(start, selected, durationDays);
-  if (repeat === 'Yearly') return occursYearly(start, selected, durationDays);
+  if (repeat === 'Daily') return occursEveryDays(start, selected, durationDays, 1, item.repeatOccurrences);
+  if (repeat === 'Weekly') return occursEveryDays(start, selected, durationDays, 7, item.repeatOccurrences);
+  if (repeat === 'Monthly') return occursMonthly(start, selected, durationDays, item.repeatOccurrences);
+  if (repeat === 'Yearly') return occursYearly(start, selected, durationDays, item.repeatOccurrences);
   return false;
 }

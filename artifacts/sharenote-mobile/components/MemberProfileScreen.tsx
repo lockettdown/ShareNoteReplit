@@ -26,6 +26,26 @@ function initialsFromName(name: string) {
   return initials || 'ME';
 }
 
+function formatUpcomingEventDate(event: AppEvent) {
+  const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  if (!event.endDate || event.endDate === event.date) return formatDate(event.date);
+  return `${formatDate(event.date)} – ${formatDate(event.endDate)}`;
+}
+
+function formatUpcomingTaskDate(task: AppTask) {
+  const formatDate = (value: string) => new Date(`${value}T12:00:00`).toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+  });
+
+  if (!task.endDate || task.endDate === task.date) return formatDate(task.date);
+  return `${formatDate(task.date)} – ${formatDate(task.endDate)}`;
+}
+
 export default function MemberProfileScreen() {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
@@ -85,7 +105,7 @@ export default function MemberProfileScreen() {
     setSelectedEvent(null);
     router.push({
       pathname: '/add-event',
-      params: { editEventId: event.id },
+      params: { editEventId: event.id, occurrenceDate: event.date },
     });
   }
 
@@ -150,17 +170,7 @@ export default function MemberProfileScreen() {
         <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
           {member.name}
         </Text>
-        {canManageFamily ? (
-          <Pressable
-            accessibilityLabel={`Edit ${member.name}`}
-            onPress={openEditMember}
-            style={[styles.headerRight, styles.editButton, { backgroundColor: colors.secondary }]}
-          >
-            <Feather name="edit-2" size={18} color={colors.primaryStrong} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerRight} />
-        )}
+        <View style={styles.headerRight} />
       </View>
 
       <ScrollView
@@ -179,6 +189,25 @@ export default function MemberProfileScreen() {
               {member.role}
             </Text>
           </View>
+          {canManageFamily ? (
+            <Pressable
+              accessibilityLabel={`Edit ${member.name}`}
+              onPress={openEditMember}
+              style={({ pressed }) => [
+                styles.profileEditButton,
+                {
+                  backgroundColor: colors.card,
+                  borderColor: colors.border,
+                  opacity: pressed ? 0.82 : 1,
+                },
+              ]}
+            >
+              <Feather name="edit-2" size={16} color={colors.primaryStrong} />
+              <Text style={[styles.profileEditText, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}>
+                Edit Profile
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
 
         {canManageFamily ? (
@@ -320,6 +349,12 @@ export default function MemberProfileScreen() {
                       </Text>
                     </View>
                   </View>
+                  <Text
+                    style={[styles.eventDate, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}
+                    numberOfLines={1}
+                  >
+                    {formatUpcomingTaskDate(task)}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -359,6 +394,12 @@ export default function MemberProfileScreen() {
                       </Text>
                     </View>
                   </View>
+                  <Text
+                    style={[styles.eventDate, { color: colors.primaryStrong, fontFamily: 'Inter_600SemiBold' }]}
+                    numberOfLines={1}
+                  >
+                    {formatUpcomingEventDate(event)}
+                  </Text>
                 </Pressable>
               ))}
             </View>
@@ -482,7 +523,6 @@ const styles = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 24, paddingBottom: 16 },
   headerLeft: { width: 40 },
   headerRight: { width: 40, alignItems: 'center', justifyContent: 'center' },
-  editButton: { height: 40, borderRadius: 20 },
   headerTitle: { fontSize: 20 },
   scroll: { flex: 1 },
   scrollContent: { paddingHorizontal: 24, paddingTop: 16, gap: 32 },
@@ -490,6 +530,16 @@ const styles = StyleSheet.create({
   heroName: { fontSize: 24 },
   roleBadge: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 999, gap: 6 },
   roleText: { fontSize: 13 },
+  profileEditButton: {
+    minHeight: 40,
+    borderRadius: 14,
+    borderWidth: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 14,
+  },
+  profileEditText: { fontSize: 14 },
   quickAddRow: { flexDirection: 'row', gap: 12 },
   quickAddButton: {
     flex: 1,
@@ -535,6 +585,7 @@ const styles = StyleSheet.create({
   disabledControl: { opacity: 0.45 },
   eventIcon: { width: 28, height: 28, alignItems: 'center', justifyContent: 'center' },
   taskContent: { flex: 1, gap: 4 },
+  eventDate: { fontSize: 14, maxWidth: 96, textAlign: 'right' },
   taskTitle: { fontSize: 16 },
   taskMeta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   taskMetaText: { fontSize: 13 },

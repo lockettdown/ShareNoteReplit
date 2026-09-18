@@ -93,13 +93,14 @@ export default function FamilyScreen() {
         >
           <Text style={[styles.headerTitle, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>Family Members</Text>
         </Pressable>
-        {canManageFamily ? (
-          <Pressable style={styles.headerRight} onPress={() => router.push('/family/settings')}>
-            <Feather name="settings" size={20} color={colors.primaryStrong} />
-          </Pressable>
-        ) : (
-          <View style={styles.headerRight} />
-        )}
+        <Pressable
+          accessibilityLabel="Open settings"
+          hitSlop={10}
+          style={styles.headerRight}
+          onPress={() => router.push('/family/settings')}
+        >
+          <Feather name="settings" size={20} color={colors.primaryStrong} />
+        </Pressable>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={[styles.scrollContent, { paddingBottom: bottomPad + 100 }]} showsVerticalScrollIndicator={false}>
         {canManageFamily ? (
