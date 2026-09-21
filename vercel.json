@@ -1,5 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "mkdir -p public; if test -f index.html; then cp -R index.html styles.css assets public; elif test -d dist; then cp -R dist/. public; else cp -R artifacts/loopnest-website/dist/. public; fi",
   "outputDirectory": "public"
 }
