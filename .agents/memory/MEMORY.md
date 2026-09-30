@@ -3,3 +3,7 @@
 - [GitHub binary uploads](github-binary-uploads.md) — for large or binary files, read bytes directly in the integration call; shell-captured base64 can silently alter uploaded blobs.
 - [RevenueCat product branding](revenuecat-product-branding.md) — product display names and SDK descriptions can come from different metadata sources; guard against stale store copy.
 - [RevenueCat trial clock](revenuecat-trial-clock.md) — free trials use a forced server timestamp plus monotonic time; cached data and device wall clocks cannot grant access.
+- [Expo plist parser compatibility](expo-plist-parser-compatibility.md) — keep xmldom on the 0.8 API while Expo plist calls parseFromString without a MIME type.
+- [Expo Launch macOS dependencies](expo-launch-macos-dependencies.md) — keep macOS optional binaries in the lockfile; Expo Launch archives iOS on macOS.
+- [Metro transformer masking](metro-transformer-masking.md) — Metro 0.84.5 hides transformer startup failures behind `transformFile`; propagate the original error and declare Babel presets directly.
+- [Family account deletion boundaries](family-account-deletion.md) — require a server-authorized Parent session; deleting the family login does not cancel store billing or erase purchase records.

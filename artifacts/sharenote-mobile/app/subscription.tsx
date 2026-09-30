@@ -154,6 +154,9 @@ export default function SubscriptionScreen() {
             <Pressable disabled={isRestoring || isPurchasing} onPress={() => void handleRestore()} style={styles.restore}>
               {isRestoring ? <ActivityIndicator size="small" color={colors.primary} /> : <Text style={[styles.link, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Restore Purchases</Text>}
             </Pressable>
+            <Pressable accessibilityRole="button" accessibilityLabel="Account Settings" onPress={() => router.push('/family/settings')} style={styles.restore}>
+              <Text style={[styles.link, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Account Settings</Text>
+            </Pressable>
             <Text style={[styles.finePrint, { color: colors.mutedForeground }]}>Subscriptions renew automatically unless cancelled through your store account. Prices and billing periods are supplied by the App Store, Google Play, or RevenueCat Test Store.</Text>
           </>
         ) : null}

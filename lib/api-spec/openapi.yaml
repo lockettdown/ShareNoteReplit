@@ -10,7 +10,24 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: account
+    description: Account operations
 paths:
+  /account:
+    delete:
+      operationId: deleteAccount
+      tags: [account]
+      summary: Permanently delete the signed-in family account
+      description: Requires a server-authorized Parent profile. Deletes the Supabase user and cascading family data.
+      responses:
+        "204":
+          description: Account deleted
+        "401":
+          description: Authentication required
+        "403":
+          description: Parent profile required
+        "503":
+          description: Account deletion is unavailable
   /healthz:
     get:
       operationId: healthCheck

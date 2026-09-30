@@ -1,7 +1,10 @@
 import { Feather } from '@expo/vector-icons';
+import { deleteAccount } from '@workspace/api-client-react';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { type Href, useRouter } from 'expo-router';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useState } from 'react';
+import { Alert, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PermissionNotice } from '@/components/PermissionNotice';
 import { useAppState } from '@/context/AppState';
@@ -11,7 +14,10 @@ export default function SettingsScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState('');
   const {
+    authUser,
     familyName,
     familyEmail,
     activeProfile,
@@ -33,6 +39,41 @@ export default function SettingsScreen() {
     Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     void signOut();
     router.replace('/');
+  }
+
+  async function confirmDeletion() {
+    if (isDeleting || !authUser) return;
+    setIsDeleting(true);
+    setDeleteError('');
+    try {
+      await deleteAccount();
+    } catch {
+      setDeleteError('Deletion could not be confirmed. Check whether you can still sign in before trying again.');
+      setIsDeleting(false);
+      return;
+    }
+    // The server has already deleted the account; clear local state even if token revocation fails.
+    try {
+      await signOut();
+    } catch {
+      // signOut clears local state before asking Supabase to revoke the old session.
+    }
+    router.replace('/');
+    setIsDeleting(false);
+  }
+
+  function handleDeleteAccount() {
+    if (isDeleting) return;
+    Haptics.selectionAsync();
+    const message = 'This permanently deletes your family account, profiles, events, tasks, and groceries. This cannot be undone. Any App Store or Google Play subscription must be canceled separately.';
+    if (Platform.OS === 'web') {
+      if (globalThis.confirm(`Delete family account?\n\n${message}`)) void confirmDeletion();
+      return;
+    }
+    Alert.alert('Delete family account?', message, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Delete Account', style: 'destructive', onPress: () => { void confirmDeletion(); } },
+    ]);
   }
 
   return (
@@ -138,6 +179,59 @@ export default function SettingsScreen() {
             </View>
           </>
         )}
+        <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+          <Text style={[styles.cardHeading, { color: colors.primaryStrong, fontFamily: 'Montserrat_700Bold' }]}>
+            Privacy
+          </Text>
+          <Pressable
+            accessibilityRole="link"
+            accessibilityLabel="Open Privacy Policy"
+            style={styles.accountRow}
+            onPress={() => {
+              void Linking.openURL('https://homeloopnest.com/privacy-policy.html').catch(() => {
+                Alert.alert('Could not open the Privacy Policy', 'Please try again later.');
+              });
+            }}
+          >
+            <View style={[styles.accountRowIcon, { backgroundColor: colors.chip }]}>
+              <Feather name="shield" size={16} color={colors.primary} />
+            </View>
+            <Text style={[styles.accountRowLabel, { color: colors.foreground, fontFamily: 'Inter_500Medium' }]}>
+              Privacy Policy
+            </Text>
+            <Feather name="external-link" size={16} color={colors.mutedForeground} />
+          </Pressable>
+        </View>
+        {canManageFamily && (
+          <View style={[styles.card, { backgroundColor: colors.card, shadowColor: colors.shadow }]}>
+            <Text style={[styles.cardHeading, { color: colors.destructive, fontFamily: 'Montserrat_700Bold' }]}>
+              Delete Account
+            </Text>
+            <Text style={[styles.cardDescription, { color: colors.mutedForeground, fontFamily: 'Inter_400Regular' }]}>
+              Permanently remove this family account and all shared data. This does not cancel an active subscription.
+            </Text>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Delete family account"
+              disabled={isDeleting || !authUser}
+              style={[styles.accountRow, (isDeleting || !authUser) && styles.disabled]}
+              onPress={handleDeleteAccount}
+            >
+              <View style={[styles.accountRowIcon, { backgroundColor: colors.accentDangerSoft }]}>
+                <Feather name="trash-2" size={16} color={colors.destructive} />
+              </View>
+              <Text style={[styles.accountRowLabel, { color: colors.destructive, fontFamily: 'Inter_600SemiBold' }]}>
+                {isDeleting ? 'Deleting Account…' : 'Delete Account'}
+              </Text>
+              <Feather name="chevron-right" size={16} color={colors.destructive} />
+            </Pressable>
+            {!!deleteError && (
+              <Text accessibilityRole="alert" style={[styles.cardDescription, { color: colors.destructive }]}>
+                {deleteError}
+              </Text>
+            )}
+          </View>
+        )}
       </ScrollView>
     </View>
   );
@@ -167,6 +261,7 @@ const styles = StyleSheet.create({
   accountRow: { flexDirection: 'row', alignItems: 'center', gap: 16, paddingVertical: 8 },
   accountRowIcon: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
   accountRowLabel: { flex: 1, fontSize: 16 },
+  disabled: { opacity: 0.5 },
   divider: { height: 1, marginLeft: 56 },
   signOutButton: { height: 52, borderRadius: 16, alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 },
   signOutText: { fontSize: 16 },

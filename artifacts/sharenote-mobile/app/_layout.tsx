@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { setAuthTokenGetter, setBaseUrl } from '@workspace/api-client-react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { KeyboardProvider } from 'react-native-keyboard-controller';
@@ -16,6 +17,17 @@ import { Redirect, Stack, usePathname, useRouter } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppStateProvider, useAppState } from '@/context/AppState';
 import { SubscriptionProvider, useSubscription } from '@/lib/revenuecat';
+import { supabase } from '@/lib/supabase';
+
+if (process.env.EXPO_PUBLIC_DOMAIN) {
+  setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
+}
+setAuthTokenGetter(async () => {
+  if (!supabase) return null;
+  const { data, error } = await supabase.auth.getSession();
+  if (error) throw error;
+  return data.session?.access_token ?? null;
+});
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
@@ -30,7 +42,12 @@ function RootLayoutNav() {
 
   useEffect(() => {
     if (isAuthLoading || isFamilyStateLoading || isSubscriptionLoading || !authUser || !hasFamily || hasAccess) return;
-    if (pathname !== '/subscription' && pathname !== '/reset-password') {
+    if (
+      pathname !== '/subscription'
+      && pathname !== '/reset-password'
+      && pathname !== '/family/settings'
+      && pathname !== '/profile-select'
+    ) {
       router.replace('/subscription');
     }
   }, [authUser, hasAccess, hasFamily, isAuthLoading, isFamilyStateLoading, isSubscriptionLoading, pathname, router]);
