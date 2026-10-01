@@ -13,11 +13,14 @@ import {
 } from '@expo-google-fonts/inter';
 import { Montserrat_700Bold } from '@expo-google-fonts/montserrat';
 import { useFonts } from 'expo-font';
-import { Redirect, Stack, usePathname, useRouter } from 'expo-router';
+import { Redirect, Stack, usePathname } from 'expo-router';
+import { ActivityIndicator, View } from 'react-native';
 import * as SplashScreen from 'expo-splash-screen';
 import { AppStateProvider, useAppState } from '@/context/AppState';
 import { SubscriptionProvider, useSubscription } from '@/lib/revenuecat';
 import { supabase } from '@/lib/supabase';
+import { getSubscriptionGate } from '@/lib/subscription-access';
+import { useColors } from '@/hooks/useColors';
 
 if (process.env.EXPO_PUBLIC_DOMAIN) {
   setBaseUrl(`https://${process.env.EXPO_PUBLIC_DOMAIN}`);
@@ -36,21 +39,21 @@ const queryClient = new QueryClient();
 
 function RootLayoutNav() {
   const pathname = usePathname();
-  const router = useRouter();
+  const colors = useColors();
   const { authUser, hasFamily, isAuthLoading, isFamilyStateLoading } = useAppState();
-  const { hasAccess, isLoading: isSubscriptionLoading } = useSubscription();
-
-  useEffect(() => {
-    if (isAuthLoading || isFamilyStateLoading || isSubscriptionLoading || !authUser || !hasFamily || hasAccess) return;
-    if (
-      pathname !== '/subscription'
-      && pathname !== '/reset-password'
-      && pathname !== '/family/settings'
-      && pathname !== '/profile-select'
-    ) {
-      router.replace('/subscription');
-    }
-  }, [authUser, hasAccess, hasFamily, isAuthLoading, isFamilyStateLoading, isSubscriptionLoading, pathname, router]);
+  const { hasAccess, isAccessLoading } = useSubscription();
+  const gate = getSubscriptionGate(
+    !isAuthLoading && !isFamilyStateLoading && Boolean(authUser),
+    hasFamily, hasAccess, isAccessLoading, pathname,
+  );
+  if (gate === 'checking') {
+    return (
+      <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.background }}>
+        <ActivityIndicator accessibilityLabel="Verifying account access" color={colors.primary} />
+      </View>
+    );
+  }
+  if (gate === 'subscription') return <Redirect href="/subscription" />;
 
   if (
     !isAuthLoading

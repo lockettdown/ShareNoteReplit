@@ -24,7 +24,7 @@ export default function SubscriptionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const colors = useColors();
-  const { packages, isSubscribed, isTrialActive, isTrialExpired, trialDaysRemaining, isLoading, isPurchasing, isRestoring, error, isTestMode, isBypassMode, purchase, restore, refresh } = useSubscription();
+  const { packages, isSubscribed, isTrialActive, isTrialExpired, trialDaysRemaining, isLoading, isAccessLoading, isPurchasing, isRestoring, error, isTestMode, isBypassMode, purchase, restore, refresh } = useSubscription();
   const [pendingPackage, setPendingPackage] = useState<PurchasesPackage | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
 
@@ -72,7 +72,7 @@ export default function SubscriptionScreen() {
               ? 'Your subscription is active'
               : isTrialActive
                 ? `${trialDaysRemaining} ${trialDaysRemaining === 1 ? 'day' : 'days'} left in your trial`
-                : 'Choose a plan to continue'}
+                 : isTrialExpired ? 'Choose a plan to continue' : 'Checking your free trial'}
           </Text>
           <Text style={[styles.heroBody, { color: colors.primaryForeground, fontFamily: 'Inter_400Regular' }]}>
             {isBypassMode
@@ -81,9 +81,28 @@ export default function SubscriptionScreen() {
               ? 'Home Loopnest is ready for your whole family.'
               : isTrialActive
                 ? 'Enjoy full access during your 10-day trial. Subscribe to keep using Home Loopnest afterward.'
-                : 'Your 10-day trial has ended. Select monthly or yearly billing to continue using Home Loopnest.'}
+                 : isTrialExpired
+                   ? 'Your 10-day trial has ended. Select monthly or yearly billing to continue using Home Loopnest.'
+                   : 'Your account includes a 10-day free trial. We need to verify your account before you can continue. Tap Try again if verification did not finish.'}
           </Text>
         </View>
+
+        {isTrialActive && !isSubscribed ? (
+          <Pressable
+            accessibilityRole="button"
+            onPress={() => router.replace('/profile-select')}
+            style={[styles.messageCard, { backgroundColor: colors.primary }]}
+          >
+            <Text style={[styles.messageTitle, { color: colors.primaryForeground, fontFamily: 'Inter_600SemiBold' }]}>Continue free trial</Text>
+            <Text style={[styles.muted, { color: colors.primaryForeground }]}>Use Loopnest now. No subscription purchase is required during your trial.</Text>
+          </Pressable>
+        ) : null}
+
+        {!isAccessLoading && !isTrialActive && !isTrialExpired && !isSubscribed && !isBypassMode ? (
+          <Pressable accessibilityRole="button" onPress={() => void refresh()} style={styles.restore}>
+            <Text style={[styles.link, { color: colors.primary }]}>Try again to verify your free trial</Text>
+          </Pressable>
+        ) : null}
 
         <View style={[styles.benefitsCard, { backgroundColor: colors.card }]}>
           <Text style={[styles.benefitsTitle, { color: colors.foreground, fontFamily: 'Montserrat_700Bold' }]}>Your Loopnest plan includes</Text>
@@ -110,7 +129,11 @@ export default function SubscriptionScreen() {
         ) : packages.length === 0 ? (
           <View style={[styles.messageCard, { backgroundColor: colors.card }]}>
             <Text style={[styles.messageTitle, { color: colors.foreground, fontFamily: 'Inter_600SemiBold' }]}>Plans are unavailable</Text>
-            <Text style={[styles.muted, { color: colors.mutedForeground }]}>Check your connection and try again.</Text>
+            <Text style={[styles.muted, { color: colors.mutedForeground }]}>
+              {isTrialActive
+                ? 'Your free trial is active. You can continue using Loopnest while subscription plans are unavailable.'
+                : 'Subscription options could not be loaded. Try again to refresh your account and plans.'}
+            </Text>
             <Pressable onPress={() => void refresh()}><Text style={[styles.link, { color: colors.primary }]}>Try again</Text></Pressable>
           </View>
         ) : (
