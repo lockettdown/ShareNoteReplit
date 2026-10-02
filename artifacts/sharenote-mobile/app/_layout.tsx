@@ -37,7 +37,7 @@ SplashScreen.preventAutoHideAsync();
 
 const queryClient = new QueryClient();
 
-function RootLayoutNav() {
+function RouteAccessGate({ children }: React.PropsWithChildren) {
   const pathname = usePathname();
   const colors = useColors();
   const { authUser, hasFamily, isAuthLoading, isFamilyStateLoading } = useAppState();
@@ -68,8 +68,18 @@ function RootLayoutNav() {
     return <Redirect href="/" />;
   }
 
+  return <>{children}</>;
+}
+
+// Keep the root navigator mounted while account state changes. Access checks
+// belong inside its screens, so an in-flight signup can still navigate safely.
+function renderGuardedScreen({ children }: { children: React.ReactNode }) {
+  return <RouteAccessGate>{children}</RouteAccessGate>;
+}
+
+function RootLayoutNav() {
   return (
-    <Stack>
+    <Stack screenLayout={renderGuardedScreen}>
       <Stack.Screen name="index" options={{ headerShown: false }} />
       <Stack.Screen name="create-family" options={{ headerShown: false, presentation: 'modal' }} />
       <Stack.Screen name="sign-in" options={{ headerShown: false }} />
