@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "Home Loopnest",
-    "slug": "sharenote-mobile",
+    "name": "Loopnest",
+    "slug": "loopnest",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
@@ -10,6 +10,7 @@
     "ios": {
       "supportsTablet": false,
       "bundleIdentifier": "app.replit.loopnest",
+      "appleTeamId": "95882PYD43",
       "buildNumber": "11",
       "infoPlist": {
         "ITSAppUsesNonExemptEncryption": false
@@ -42,9 +43,9 @@
     },
     "extra": {
       "eas": {
-        "projectId": "e68c6f5f-b3ec-41a6-a203-0a397de0397f"
+        "projectId": "81075593-e472-4d67-8d69-9378d3e93dea"
       }
     },
-    "owner": "seandavid"
+    "owner": "replit-private-e09d0c24-8404-4b88-8aae-6e78bf81ccf9"
   }
 }
