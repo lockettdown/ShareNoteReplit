@@ -1,5 +1,6 @@
 import { Feather } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
+import * as Linking from 'expo-linking';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, Modal, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
@@ -181,6 +182,14 @@ export default function SubscriptionScreen() {
               <Text style={[styles.link, { color: colors.primary, fontFamily: 'Inter_600SemiBold' }]}>Account Settings</Text>
             </Pressable>
             <Text style={[styles.finePrint, { color: colors.mutedForeground }]}>Subscriptions renew automatically unless cancelled through your store account. Prices and billing periods are supplied by the App Store, Google Play, or RevenueCat Test Store.</Text>
+            <View style={styles.legalLinks}>
+              <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://www.apple.com/legal/internet-services/itunes/dev/stdeula/')}>
+                <Text style={[styles.link, { color: colors.primary }]}>Terms of Use</Text>
+              </Pressable>
+              <Pressable accessibilityRole="link" onPress={() => void Linking.openURL('https://homeloopnest.com/privacy-policy.html')}>
+                <Text style={[styles.link, { color: colors.primary }]}>Privacy Policy</Text>
+              </Pressable>
+            </View>
           </>
         ) : null}
       </ScrollView>
@@ -238,6 +247,7 @@ const styles = StyleSheet.create({
   restore: { minHeight: 44, alignItems: 'center', justifyContent: 'center' },
   link: { fontSize: 15, fontFamily: 'Inter_600SemiBold' },
   finePrint: { fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  legalLinks: { flexDirection: 'row', justifyContent: 'center', flexWrap: 'wrap', gap: 24 },
   modalBackdrop: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24 },
   modalCard: { width: '100%', borderRadius: 24, padding: 24, gap: 16 },
   modalTitle: { fontSize: 20, textAlign: 'center' },

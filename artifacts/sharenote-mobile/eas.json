@@ -1,0 +1,21 @@
+{
+  "cli": {
+    "appVersionSource": "local"
+  },
+  "build": {
+    "production": {
+      "distribution": "store",
+      "environment": "production",
+      "ios": {
+        "image": "sdk-57"
+      }
+    }
+  },
+  "submit": {
+    "production": {
+      "ios": {
+        "ascAppId": "6814599087"
+      }
+    }
+  }
+}

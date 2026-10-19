@@ -9,7 +9,11 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": false,
-      "bundleIdentifier": "com.sharenote.app"
+      "bundleIdentifier": "app.replit.loopnest",
+      "buildNumber": "11",
+      "infoPlist": {
+        "ITSAppUsesNonExemptEncryption": false
+      }
     },
     "android": {
       "package": "com.sharenote.app",
@@ -35,6 +39,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
-    }
+    },
+    "extra": {
+      "eas": {
+        "projectId": "e68c6f5f-b3ec-41a6-a203-0a397de0397f"
+      }
+    },
+    "owner": "seandavid"
   }
 }
